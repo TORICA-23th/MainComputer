@@ -2,8 +2,8 @@
 #include <Arduino.h>
 
 int TORICA_UART::readUART() {
-  if (serial->available() > 0) {
-    buff[i] = serial->read();
+  while (serial->available() > 0) {
+    buff[i] = (char)serial->read();
     if (buff[i] == '\n') {
       buff[i] == '\0';
       UART_data[0] = atof(strtok(buff, ","));
