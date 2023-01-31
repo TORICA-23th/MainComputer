@@ -1,3 +1,8 @@
+/*
+SDをクラスにまとめる
+操舵量を取得する
+GPSを試す
+*/
 #include <DueTimer.h>
 
 #include <SPI.h>
@@ -5,6 +10,7 @@
 const int cs_SD = 10;
 char fileName[16];
 File dataFile;
+bool SDisActive = false;
 String SD_buf[2];
 int SD_buf_index = 0;
 
@@ -41,7 +47,7 @@ void ISR_UART_500Hz() {
       SD_Under.concat(Under_UART.UART_data[j]);
     }
     SD_Under.concat("\n");
-    SD_buf[SD_buf_index].concat(SD_Under);
+    add_str_SD(SD_Under);
   }
 
   //AirData
@@ -68,11 +74,14 @@ void ISR_UART_500Hz() {
       SD_GPS.concat(",");
       SD_GPS.concat(String(gps.location.lng(), 6));
 
+      SD_GPS.concat(",");
+      SD_GPS.concat(String(gps.altitude.meters(), 2));
+
       SD_GPS.concat("\n");
-      SD_buf[SD_buf_index].concat(SD_GPS);
+      add_str_SD(SD_GPS);
     }
   }
-  
+
   //DEBUG
   if (micros() - time > 1900) { //MAX2000=500Hz
     SerialUSB.print("ISR500Hz_overrun!!!");
@@ -125,7 +134,7 @@ void ISR_I2C0_100Hz() {
   SD_IMU.concat(",");
   SD_IMU.concat(quat.z());
   SD_IMU.concat("\n");
-  SD_buf[SD_buf_index].concat(SD_IMU);
+  add_str_SD(SD_IMU);
 
   String SD_PRESSURE = "";
   if (dps.temperatureAvailable() && dps.pressureAvailable()) {
@@ -138,7 +147,7 @@ void ISR_I2C0_100Hz() {
     SD_PRESSURE.concat(temp_event.temperature);
     SD_PRESSURE.concat("\n");
   }
-  SD_buf[SD_buf_index].concat(SD_PRESSURE);
+  add_str_SD(SD_PRESSURE);
 
   if (micros() - time > 9900) { //MAX10000=100Hz
     SerialUSB.print("ISR100Hz_overrun!!!");
@@ -148,6 +157,8 @@ void ISR_I2C0_100Hz() {
 }
 
 void setup() {
+  //delay for flash
+  delay(3000);
 
   Serial1.begin(115200);
   Serial2.begin(115200);
@@ -155,15 +166,56 @@ void setup() {
 
   SerialUSB.begin(115200);
   /*
-  while (!SerialUSB) {
+    while (!SerialUSB) {
     ; // wait for SerialUSB port to connect. Needed for native USB port only
-  }*/
+    }*/
 
   pinMode(LED_BUILTIN, OUTPUT);
+  SDisActive = begin_SD();
+
+  Wire.setClock(400000);
+  if (! dps.begin_I2C()) {             // Can pass in I2C address here
+    //if (! dps.begin_SPI(DPS310_CS)) {  // If you want to use SPI
+    SerialUSB.println("Failed to find DPS");
+    while (1) yield();
+  }
+  dps.configurePressure(DPS310_64HZ, DPS310_64SAMPLES);
+  dps.configureTemperature(DPS310_64HZ, DPS310_64SAMPLES);
+  SerialUSB.println("DPS OK!");
+  
+  if (!bno.begin())
+  {
+    SerialUSB.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    while (1);
+  }
+
+  //for CALLOUT
+  Wire1.setClock(400000);
+  //ToDo
+
+
+  Timer3.attachInterrupt(ISR_I2C0_100Hz).start(10000);
+  Timer4.attachInterrupt(ISR_UART_500Hz).start(2000);
+  NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
+  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14); //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
+  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15); //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
+}
+
+void loop() {
+  if (SDisActive) {
+    flash_SD();
+  } else {
+    SDisActive = begin_SD();
+  }
+  delay(1000);//millisで実装
+  callout_altitude();
+}
+
+bool begin_SD() {
   SerialUSB.print("Initializing SD card...");
   if (!SD.begin(cs_SD)) {
     SerialUSB.println("Card failed, or not present");
-    while (1);
+    return false;
   }
   String s;
   int fileNum = 0;
@@ -181,38 +233,13 @@ void setup() {
     fileNum++;
   }
   SerialUSB.println("card initialized.");
-
-  Wire.setClock(400000);
-  if (! dps.begin_I2C()) {             // Can pass in I2C address here
-    //if (! dps.begin_SPI(DPS310_CS)) {  // If you want to use SPI
-    SerialUSB.println("Failed to find DPS");
-    while (1) yield();
-  }
-  dps.configurePressure(DPS310_64HZ, DPS310_64SAMPLES);
-  dps.configureTemperature(DPS310_64HZ, DPS310_64SAMPLES);
-  SerialUSB.println("DPS OK!");
-
-  Wire1.setClock(400000);
-  //for CALLOUT
-  //ToDo
-
-  if (!bno.begin())
-  {
-    SerialUSB.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while (1);
-  }
-
-  Timer3.attachInterrupt(ISR_I2C0_100Hz).start(10000);
-  Timer4.attachInterrupt(ISR_UART_500Hz).start(2000);
-  NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
-  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14); //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
-  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15); //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
+  return true;
 }
 
-void loop() {
-  flash_SD();
-  delay(1000);
-  callout_altitude();
+void add_str_SD(String str) {
+  if (SDisActive) {
+    SD_buf[SD_buf_index].concat(str);
+  }
 }
 
 void flash_SD() {
@@ -234,6 +261,8 @@ void flash_SD() {
   }
   else {
     SerialUSB.println("error opening file");
+    SDisActive=false;
+    SD.end();
   }
   digitalWrite(LED_BUILTIN, LOW);
 
