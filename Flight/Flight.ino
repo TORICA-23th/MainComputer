@@ -1,24 +1,19 @@
 /*
-SDをクラスにまとめる
-操舵量を取得する
-GPSを試す
-エアデータと機体下にデータ送信
-音声で伝えるデータの仕様決め
+  エアデータと機体下にデータ送信
+  音声で伝えるデータの仕様決め
 */
 #include <DueTimer.h>
 
-#include <SPI.h>
-#include <SD.h>
+#include "TORICA_SD.h"
 const int cs_SD = 10;
-char fileName[16];
-File dataFile;
-bool SDisActive = false;
-String SD_buf[2];
-int SD_buf_index = 0;
+TORICA_SD main_SD(cs_SD);
 
 #include "TORICA_UART.h"
-TORICA_UART Under_UART(&Serial1);
-TORICA_UART Air_UART(&Serial2);
+TORICA_UART Under_UART(&Serial2);
+//TORICA_UART Air_UART(&Serial1);
+
+#include "TORICA_ICS.h"
+TORICA_ICS ics(&Serial1);
 
 #include <TinyGPSPlus.h>
 TinyGPSPlus gps;
@@ -49,11 +44,23 @@ void ISR_UART_500Hz() {
       SD_Under.concat(Under_UART.UART_data[j]);
     }
     SD_Under.concat("\n");
-    add_str_SD(SD_Under);
+    main_SD.add_str(SD_Under);
   }
 
   //AirData
   //ToDo
+
+  //ICS
+  int ics_angle = ics.read_Angle();
+  if (ics_angle > 0) {
+    String SD_ICS = "";
+    SD_ICS.concat("Rudder,");
+    SD_ICS.concat(",");
+    SD_ICS.concat(millis());
+    SD_ICS.concat(",");
+    SD_ICS.concat(ics_angle);
+    main_SD.add_str(SD_ICS);
+  }
 
   //GPS
   while (SerialGPS.available() > 0) {
@@ -80,7 +87,7 @@ void ISR_UART_500Hz() {
       SD_GPS.concat(String(gps.altitude.meters(), 2));
 
       SD_GPS.concat("\n");
-      add_str_SD(SD_GPS);
+      main_SD.add_str(SD_GPS);
     }
   }
 
@@ -136,10 +143,11 @@ void ISR_I2C0_100Hz() {
   SD_IMU.concat(",");
   SD_IMU.concat(quat.z());
   SD_IMU.concat("\n");
-  add_str_SD(SD_IMU);
+  main_SD.add_str(SD_IMU);
 
-  String SD_PRESSURE = "";
+
   if (dps.temperatureAvailable() && dps.pressureAvailable()) {
+    String SD_PRESSURE = "";
     dps.getEvents(&temp_event, &pressure_event);
     SD_PRESSURE.concat("PRESSURE,");
     SD_PRESSURE.concat(millis());
@@ -148,8 +156,9 @@ void ISR_I2C0_100Hz() {
     SD_PRESSURE.concat(",");
     SD_PRESSURE.concat(temp_event.temperature);
     SD_PRESSURE.concat("\n");
+    main_SD.add_str(SD_PRESSURE);
   }
-  add_str_SD(SD_PRESSURE);
+
 
   if (micros() - time > 9900) { //MAX10000=100Hz
     SerialUSB.print("ISR100Hz_overrun!!!");
@@ -173,7 +182,7 @@ void setup() {
     }*/
 
   pinMode(LED_BUILTIN, OUTPUT);
-  SDisActive = begin_SD();
+  main_SD.SDisActive = main_SD.begin();
 
   Wire.setClock(400000);
   if (! dps.begin_I2C()) {             // Can pass in I2C address here
@@ -184,7 +193,7 @@ void setup() {
   dps.configurePressure(DPS310_64HZ, DPS310_64SAMPLES);
   dps.configureTemperature(DPS310_64HZ, DPS310_64SAMPLES);
   SerialUSB.println("DPS OK!");
-  
+
   if (!bno.begin())
   {
     SerialUSB.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
@@ -204,73 +213,13 @@ void setup() {
 }
 
 void loop() {
-  if (SDisActive) {
-    flash_SD();
+  if (main_SD.SDisActive) {
+    main_SD.flash();
   } else {
-    SDisActive = begin_SD();
+    main_SD.SDisActive = main_SD.begin();
   }
   delay(1000);//millisで実装
   callout_altitude();
-}
-
-bool begin_SD() {
-  SerialUSB.print("Initializing SD card...");
-  if (!SD.begin(cs_SD)) {
-    SerialUSB.println("Card failed, or not present");
-    return false;
-  }
-  String s;
-  int fileNum = 0;
-  while (1) {
-    s = "LOG";
-    if (fileNum < 10) {
-      s += "00";
-    } else if (fileNum < 100) {
-      s += "0";
-    }
-    s += fileNum;
-    s += ".CSV";
-    s.toCharArray(fileName, 16);
-    if (!SD.exists(fileName)) break;
-    fileNum++;
-  }
-  SerialUSB.println("card initialized.");
-  return true;
-}
-
-void add_str_SD(String str) {
-  if (SDisActive) {
-    SD_buf[SD_buf_index].concat(str);
-  }
-}
-
-void flash_SD() {
-  digitalWrite(LED_BUILTIN, HIGH);
-  unsigned long SD_time = millis();
-  int previous_index = SD_buf_index;
-  SD_buf_index = (SD_buf_index + 1) % 2;
-
-  SerialUSB.println("open_start");
-  dataFile = SD.open(fileName, FILE_WRITE);
-  SerialUSB.println("open_end");
-  if (dataFile) {
-    dataFile.print(SD_buf[previous_index]);
-    SerialUSB.println("close_start");
-    dataFile.close();
-    SerialUSB.println("close_end");
-    SerialUSB.print("SD_total:");
-    SerialUSB.println(millis() - SD_time);
-  }
-  else {
-    SerialUSB.println("error opening file");
-    SDisActive=false;
-    SD.end();
-  }
-  digitalWrite(LED_BUILTIN, LOW);
-
-  SD_buf[previous_index] = "";
-  //https://www.arduino.cc/reference/en/language/variables/data-types/string/functions/reserve/
-  //SD_buf[previous_index].reserve(sizeof(char) * 32768);
 }
 
 void callout_altitude() {
