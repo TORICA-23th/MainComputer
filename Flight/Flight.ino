@@ -4,20 +4,24 @@
 */
 #include <DueTimer.h>
 
+#define SerialICS Serial
+#define SerialGPS Serial1
+#define SerialAirData Serial2
+#define SerialUnder Serial3
+
 #include "TORICA_SD.h"
-const int cs_SD = 10;
+const int cs_SD = A8;
 TORICA_SD main_SD(cs_SD);
 
 #include "TORICA_UART.h"
-TORICA_UART Under_UART(&Serial2);
+TORICA_UART Under_UART(&SerialUnder);
 //TORICA_UART Air_UART(&Serial1);
 
 #include "TORICA_ICS.h"
-TORICA_ICS ics(&Serial1);
+TORICA_ICS ics(&SerialICS);
 
 #include <TinyGPSPlus.h>
 TinyGPSPlus gps;
-#define SerialGPS Serial
 
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
@@ -28,6 +32,12 @@ Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28, &Wire);
 #include <Adafruit_DPS310.h>
 Adafruit_DPS310 dps;
 sensors_event_t temp_event, pressure_event;
+
+void log_SD(String data) {
+  main_SD.add_str(data);
+  SerialAirData.println(data);
+  SerialUnder.println(data);
+}
 
 void ISR_UART_500Hz() {
   unsigned long time = micros();
@@ -44,7 +54,8 @@ void ISR_UART_500Hz() {
       SD_Under.concat(Under_UART.UART_data[j]);
     }
     SD_Under.concat("\n");
-    main_SD.add_str(SD_Under);
+    //main_SD.add_str(SD_Under);
+    log_SD(SD_Under);
   }
 
   //AirData
@@ -59,7 +70,8 @@ void ISR_UART_500Hz() {
     SD_ICS.concat(millis());
     SD_ICS.concat(",");
     SD_ICS.concat(ics_angle);
-    main_SD.add_str(SD_ICS);
+    //main_SD.add_str(SD_ICS);
+    log_SD(SD_ICS);
   }
 
   //GPS
@@ -87,12 +99,13 @@ void ISR_UART_500Hz() {
       SD_GPS.concat(String(gps.altitude.meters(), 2));
 
       SD_GPS.concat("\n");
-      main_SD.add_str(SD_GPS);
+      //main_SD.add_str(SD_GPS);
+      log_SD(SD_GPS);
     }
   }
 
   //DEBUG
-  if (micros() - time > 1900) { //MAX2000=500Hz
+  if (micros() - time > 1900) {  //MAX2000=500Hz
     SerialUSB.print("ISR500Hz_overrun!!!");
   }
   //SerialUSB.print("ISR_us:");
@@ -143,7 +156,8 @@ void ISR_I2C0_100Hz() {
   SD_IMU.concat(",");
   SD_IMU.concat(quat.z());
   SD_IMU.concat("\n");
-  main_SD.add_str(SD_IMU);
+  //main_SD.add_str(SD_IMU);
+  log_SD(SD_IMU);
 
 
   if (dps.temperatureAvailable() && dps.pressureAvailable()) {
@@ -156,11 +170,12 @@ void ISR_I2C0_100Hz() {
     SD_PRESSURE.concat(",");
     SD_PRESSURE.concat(temp_event.temperature);
     SD_PRESSURE.concat("\n");
-    main_SD.add_str(SD_PRESSURE);
+    //main_SD.add_str(SD_PRESSURE);
+    log_SD(SD_PRESSURE);
   }
 
 
-  if (micros() - time > 9900) { //MAX10000=100Hz
+  if (micros() - time > 9900) {  //MAX10000=100Hz
     SerialUSB.print("ISR100Hz_overrun!!!");
   }
   //SerialUSB.print("ISR_us:");
@@ -171,10 +186,10 @@ void setup() {
   //delay for flash
   delay(3000);
 
-  Serial1.begin(115200);
-  Serial2.begin(115200);
+  SerialICS.begin(115200);
+  SerialAirData.begin(115200);
   SerialGPS.begin(115200);
-
+  SerialUnder.begin(115200);
   SerialUSB.begin(115200);
   /*
     while (!SerialUSB) {
@@ -185,7 +200,7 @@ void setup() {
   main_SD.SDisActive = main_SD.begin();
 
   Wire.setClock(400000);
-  if (! dps.begin_I2C()) {             // Can pass in I2C address here
+  if (!dps.begin_I2C()) {  // Can pass in I2C address here
     //if (! dps.begin_SPI(DPS310_CS)) {  // If you want to use SPI
     SerialUSB.println("Failed to find DPS");
     while (1) yield();
@@ -194,10 +209,10 @@ void setup() {
   dps.configureTemperature(DPS310_64HZ, DPS310_64SAMPLES);
   SerialUSB.println("DPS OK!");
 
-  if (!bno.begin())
-  {
+  if (!bno.begin()) {
     SerialUSB.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while (1);
+    while (1)
+      ;
   }
 
   //for CALLOUT
@@ -208,8 +223,8 @@ void setup() {
   Timer3.attachInterrupt(ISR_I2C0_100Hz).start(10000);
   Timer4.attachInterrupt(ISR_UART_500Hz).start(2000);
   NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
-  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14); //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
-  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15); //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
+  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
+  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
 }
 
 void loop() {
@@ -218,7 +233,7 @@ void loop() {
   } else {
     main_SD.SDisActive = main_SD.begin();
   }
-  delay(1000);//millisで実装
+  delay(1000);  //millisで実装
   callout_altitude();
 }
 
