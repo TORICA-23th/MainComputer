@@ -9,15 +9,19 @@ class TORICA_SD {
     }
 
     bool begin();
-    void add_str(String str);
+    void add_str(char str[64]);
     void flash();
     bool SDisActive = false;
 
   private:
+    void new_file();
+    void end();
+    uint32_t file_time = 0;
 
     int cs_SD = LED_BUILTIN;
     char fileName[16];
     File dataFile;
-    String SD_buf[2];
+    char SD_buf[2][32768];
     int SD_buf_index = 0;
+    int SD_buf_count[2] = {0, 0};
 };

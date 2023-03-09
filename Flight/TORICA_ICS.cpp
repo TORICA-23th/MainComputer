@@ -10,7 +10,6 @@ int TORICA_ICS::read_Angle() {
       angle = bit1 * 128 + bit2;
       return angle;
     }
-  } else {
-    return 0;
   }
+  return 0;
 }
