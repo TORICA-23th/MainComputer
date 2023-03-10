@@ -6,6 +6,7 @@
 
 #define SerialICS   Serial
 #define SerialGPS   Serial1
+#define SerialTWE   Serial1
 #define SerialAir   Serial2
 #define SerialUnder Serial3
 
@@ -20,6 +21,7 @@ char SD_AirData[BUFSIZE];
 char SD_ICS[BUFSIZE];
 char SD_IMU[BUFSIZE];
 char SD_PRESSURE[BUFSIZE];
+char SD_GPS[BUFSIZE];
 
 #include "TORICA_UART.h"
 TORICA_UART Under_UART(&SerialUnder);
@@ -45,6 +47,12 @@ Adafruit_DPS310 dps;
 sensors_event_t temp_event, pressure_event;
 
 bool timer_TBD_Hz = false;
+
+float qw = 0;
+float qx = 0;
+float qy = 0;
+float qz = 0;
+float alt_ultrasonic_m = 0;
 
 void log_SD(char data[BUFSIZE]) {
   main_SD.add_str(data);
@@ -85,34 +93,12 @@ void ISR_UART_500Hz() {
   }
 
   //GPS
-  /*
-    while (SerialGPS.available() > 0) {
+  while (SerialGPS.available() > 0) {
     if (gps.encode(SerialGPS.read())) {
-      String SD_GPS = "";
-      SD_GPS.concat("GPS,");
-      SD_GPS.concat(millis());
-
-      SD_GPS.concat(",");
-      SD_GPS.concat(gps.time.hour());
-      SD_GPS.concat(",");
-      SD_GPS.concat(gps.time.minute());
-      SD_GPS.concat(",");
-      SD_GPS.concat(gps.time.second());
-      SD_GPS.concat(".");
-      SD_GPS.concat(gps.time.centisecond());
-
-      SD_GPS.concat(",");
-      SD_GPS.concat(String(gps.location.lat(), 6));
-      SD_GPS.concat(",");
-      SD_GPS.concat(String(gps.location.lng(), 6));
-
-      SD_GPS.concat(",");
-      SD_GPS.concat(String(gps.altitude.meters(), 2));
-
-      SD_GPS.concat("\n");
+      sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6f,%.6f,%.2f\n", millis(), gps.time.hour(), gps.time.minute(), gps.time.second(), gps.time.centisecond(), gps.location.lat(), gps.location.lng(), gps.altitude.meters() );
       log_SD(SD_GPS);
     }
-    }*/
+  }
 
   //DEBUG
   /*
@@ -124,6 +110,17 @@ void ISR_UART_500Hz() {
   */
 }
 
+#include <Geometry.h>
+using namespace Geometry;
+using namespace BLA;
+char TWE_BUF[256];
+void ISR_TWE_1_Hz() {
+  Quaternion qua(qx, qy, qz, qw);
+  EulerAngles euler(qua.to_rotation_matrix());
+  sprintf(TWE_BUF, "pitch[deg] roll[deg] alt[m]\n%+06.2f     %+06.2f    %.2f\n\n\n", euler.second() * 180 / 3.1415, euler.first() * 180 / 3.1415, alt_ultrasonic_m );
+  SerialTWE.print(TWE_BUF);
+}
+
 void ISR_I2C0_100Hz() {
   unsigned long time = micros();
   imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
@@ -132,6 +129,10 @@ void ISR_I2C0_100Hz() {
   //imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);         gyro.x()
   //imu::Vector<3> ground_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); ground_acc.x()
   sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(), accel.x(), accel.y(), accel.z(), quat.w(), quat.x(), quat.y(), quat.z() );
+  qw = quat.w();
+  qx = quat.x();
+  qy = quat.y();
+  qz = quat.z();
   log_SD(SD_IMU);
 
   if (dps.temperatureAvailable() && dps.pressureAvailable()) {
@@ -223,6 +224,7 @@ void setup() {
 
   Timer3.attachInterrupt(ISR_I2C0_100Hz).start(10000);
   Timer4.attachInterrupt(ISR_UART_500Hz).start(2000);
+  Timer5.attachInterrupt(ISR_TWE_1_Hz).start(1000000);
   NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
   NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
   NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
