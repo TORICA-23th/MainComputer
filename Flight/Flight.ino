@@ -189,8 +189,8 @@ void setup() {
       delay(100);
     }
   }
-  dps.configurePressure(DPS310_64HZ, DPS310_64SAMPLES);
-  dps.configureTemperature(DPS310_64HZ, DPS310_64SAMPLES);
+  dps.configurePressure(DPS310_32HZ, DPS310_16SAMPLES);
+  dps.configureTemperature(DPS310_32HZ, DPS310_2SAMPLES);
   SerialUSB.println("DPS OK!");
 
   if (!bno.begin()) {
