@@ -3,9 +3,9 @@
 
 int TORICA_UART::readUART() {
   while (serial->available() > 0) {
-    buff[i] = (char)serial->read();
-    if (buff[i] == '\n') {
-      buff[i] == '\0';
+    buff[i_buff] = (char)serial->read();
+    if (buff[i_buff] == '\n') {
+      buff[i_buff] == '\0';
       UART_data[0] = atof(strtok(buff, ","));
       int i_UART_data;
       for (i_UART_data = 1; true; i_UART_data++) {
@@ -16,10 +16,10 @@ int TORICA_UART::readUART() {
           break;
         }
       }
-      i = 0;
+      i_buff = 0;
       return i_UART_data;
     } else {
-      i += 1;
+      i_buff += 1;
     }
   }
   return 0;

@@ -9,11 +9,7 @@ class TORICA_UART {
     float UART_data[16];
 
   private:
-    int i = 0;
-    float pressure_hPa;
-    float temperature_deg;
-    float P_hight_m;
-    float S_hight_m;
+    int i_buff = 0;
     char buff[256];
     char *p;
     Stream *serial;
