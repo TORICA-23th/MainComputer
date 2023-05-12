@@ -117,8 +117,17 @@ char TWE_BUF[256];
 void ISR_TWE_1_Hz() {
   Quaternion qua(qx, qy, qz, qw);
   EulerAngles euler(qua.to_rotation_matrix());
-  sprintf(TWE_BUF, "pitch[deg] roll[deg] alt[m]\n%+06.2f     %+06.2f    %.2f\n\n\n", euler.second() * 180 / 3.1415, euler.first() * 180 / 3.1415, alt_ultrasonic_m );
-  SerialTWE.print(TWE_BUF);
+
+  Serial1.print("+roll means left wing up\n");
+  delay(10);
+  Serial1.print("pitch[deg] roll[deg] IAS[m/s]\n");
+  delay(10);
+  sprintf(TWE_BUF, "%+06.2f     %+06.2f    %.2f\n", euler.second() * 180 / 3.1415 ,-(euler.first() * 180 / 3.1415) , 0.0 );
+  Serial1.print(TWE_BUF);
+  Serial1.print("\n");
+  delay(10);
+  Serial1.print("\n");
+  delay(10);
 }
 
 void ISR_I2C0_100Hz() {
@@ -225,9 +234,10 @@ void setup() {
   Timer3.attachInterrupt(ISR_I2C0_100Hz).start(10000);
   Timer4.attachInterrupt(ISR_UART_500Hz).start(2000);
   Timer5.attachInterrupt(ISR_TWE_1_Hz).start(1000000);
-  NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
-  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
-  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
+  NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 12);
+  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 13);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
+  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
+  NVIC_SetPriority((IRQn_Type)TC5_IRQn, 15);
 }
 
 void loop() {
