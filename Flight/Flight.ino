@@ -1,7 +1,3 @@
-/*
-  エアデータと機体下にデータ送信
-  音声で伝えるデータの仕様決め
-*/
 #include <DueTimer.h>
 
 #define SerialICS   Serial
@@ -22,6 +18,7 @@ char SD_ICS[BUFSIZE];
 char SD_IMU[BUFSIZE];
 char SD_PRESSURE[BUFSIZE];
 char SD_GPS[BUFSIZE];
+char UART_SD[BUFSIZE];
 
 #include <TORICA_UART.h>
 TORICA_UART Under_UART(&SerialUnder);
@@ -48,21 +45,28 @@ sensors_event_t temp_event, pressure_event;
 
 bool timer_TBD_Hz = false;
 
-float qw = 0;
-float qx = 0;
-float qy = 0;
-float qz = 0;
-float alt_ultrasonic_m = 0;
+
+// ---- sensor data value  ----
+float data_main_bno_accx_mss = 0;
+float data_main_bno_accy_mss = 0;
+float data_main_bno_accz_mss = 0;
+float data_main_bno_qw = 0;
+float data_main_bno_qx = 0;
+float data_main_bno_qy = 0;
+float data_main_bno_qz = 0;
+
+float data_main_dps_pressure_hPa = 0;
+float data_main_dps_temperature_deg = 0;
+float data_main_dps_altitude_m = 0;
+
+float data_under_urm_alt_ultrasonic_m = 0;
+// ----------------------------
 
 void log_SD(char data[BUFSIZE]) {
   main_SD.add_str(data);
-  SerialAir.print(data);
-  //SerialAir.flush();
-  SerialUnder.print(data);
-  //SerialUnder.flush();
 }
 
-void ISR_UART_500Hz() {
+void ISR_readUART_500Hz() {
   //  unsigned long time = micros();
 
   //UnderSide
@@ -95,7 +99,9 @@ void ISR_UART_500Hz() {
   //GPS
   while (SerialGPS.available() > 0) {
     if (gps.encode(SerialGPS.read())) {
-      sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6f,%.6f,%.2f\n", millis(), gps.time.hour(), gps.time.minute(), gps.time.second(), gps.time.centisecond(), gps.location.lat(), gps.location.lng(), gps.altitude.meters() );
+      sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6f,%.6f,%.2f\n", millis(),
+              gps.time.hour(),    gps.time.minute(),  gps.time.second(),    gps.time.centisecond(),
+              gps.location.lat(), gps.location.lng(), gps.altitude.meters() );
       log_SD(SD_GPS);
     }
   }
@@ -115,14 +121,14 @@ using namespace Geometry;
 using namespace BLA;
 char TWE_BUF[256];
 void ISR_TWE_1_Hz() {
-  Quaternion qua(qx, qy, qz, qw);
+  Quaternion qua(data_main_bno_qw, data_main_bno_qy, data_main_bno_qz, data_main_bno_qw);
   EulerAngles euler(qua.to_rotation_matrix());
 
   Serial1.print("+roll means left wing up\n");
   delay(10);
   Serial1.print("pitch[deg] roll[deg] IAS[m/s]\n");
   delay(10);
-  sprintf(TWE_BUF, "%+06.2f     %+06.2f    %.2f\n", euler.second() * 180 / 3.1415 ,-(euler.first() * 180 / 3.1415) , 0.0 );
+  sprintf(TWE_BUF, "%+06.2f     %+06.2f    %.2f\n", euler.second() * 180 / 3.1415 , -(euler.first() * 180 / 3.1415) , 0.0 );
   Serial1.print(TWE_BUF);
   Serial1.print("\n");
   delay(10);
@@ -130,25 +136,41 @@ void ISR_TWE_1_Hz() {
   delay(10);
 }
 
-void ISR_I2C0_100Hz() {
+void ISR_readI2C0_sendUART_100Hz() {
   unsigned long time = micros();
   imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
   imu::Quaternion quat = bno.getQuat();
   //imu::Vector<3> magnet = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    magnet.x()
   //imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);         gyro.x()
   //imu::Vector<3> ground_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); ground_acc.x()
-  sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(), accel.x(), accel.y(), accel.z(), quat.w(), quat.x(), quat.y(), quat.z() );
-  qw = quat.w();
-  qx = quat.x();
-  qy = quat.y();
-  qz = quat.z();
+  data_main_bno_accx_mss = accel.x();
+  data_main_bno_accy_mss = accel.y();
+  data_main_bno_accz_mss = accel.z();
+  data_main_bno_qw = quat.w();
+  data_main_bno_qx = quat.x();
+  data_main_bno_qy = quat.y();
+  data_main_bno_qz = quat.z();
+  sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(),
+          data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
+          data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
   log_SD(SD_IMU);
 
   if (dps.temperatureAvailable() && dps.pressureAvailable()) {
     dps.getEvents(&temp_event, &pressure_event);
-    sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f\n", millis(), pressure_event.pressure, temp_event.temperature);
+    data_main_dps_pressure_hPa = pressure_event.pressure;
+    data_main_dps_temperature_deg = pressure_event.temperature;
+    data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
+    sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f,%.2f\n", millis(), data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
     log_SD(SD_PRESSURE);
   }
+
+  sprintf(UART_SD, "%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(),
+          data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
+          data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz,
+          data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
+  log_SD(UART_SD);
+  SerialAir.print(UART_SD);
+  SerialUnder.print(UART_SD);
 
   /*
     if (micros() - time > 9900) {  //MAX10000=100Hz
@@ -231,13 +253,13 @@ void setup() {
     delay(400);
   }
 
-  Timer3.attachInterrupt(ISR_I2C0_100Hz).start(10000);
-  Timer4.attachInterrupt(ISR_UART_500Hz).start(2000);
-  Timer5.attachInterrupt(ISR_TWE_1_Hz).start(1000000);
   NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 12);
   NVIC_SetPriority((IRQn_Type)TC3_IRQn, 13);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
   NVIC_SetPriority((IRQn_Type)TC4_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
   NVIC_SetPriority((IRQn_Type)TC5_IRQn, 15);
+  Timer3.attachInterrupt(ISR_readI2C0_sendUART_100Hz).start(10000);
+  Timer4.attachInterrupt(ISR_readUART_500Hz).start(2000);
+  Timer5.attachInterrupt(ISR_TWE_1_Hz).start(1000000);
 }
 
 void loop() {
