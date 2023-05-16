@@ -47,6 +47,7 @@ bool timer_TBD_Hz = false;
 
 
 // ---- sensor data value  ----
+//    data_マイコン名_センサー名_データ種類_単位
 float data_main_bno_accx_mss = 0;
 float data_main_bno_accy_mss = 0;
 float data_main_bno_accz_mss = 0;
@@ -59,7 +60,17 @@ float data_main_dps_pressure_hPa = 0;
 float data_main_dps_temperature_deg = 0;
 float data_main_dps_altitude_m = 0;
 
-float data_under_urm_alt_ultrasonic_m = 0;
+float data_under_dps_pressure_hPa = 0;
+float data_under_dps_temperature_deg = 0;
+float data_under_dps_pressure_altitude_m = 0;
+float data_under_urm_sonic_altitude_m = 0;
+
+float data_air_dps_pressure_hPa = 0;
+float data_air_dps_temperature_deg = 0;
+float data_air_dps_altitude_m = 0;
+float data_air_sdp_differential_pressure_Pa = 0;
+float data_air_sdp_airspeed_mss = 0;
+
 // ----------------------------
 
 void log_SD(char data[BUFSIZE]) {
@@ -73,7 +84,11 @@ void ISR_readUART_500Hz() {
   int readnum = Under_UART.readUART();
   if (readnum == 4) {
     digitalWrite(LED_Under, HIGH);
-    sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", millis(), Under_UART.UART_data[0], Under_UART.UART_data[1], Under_UART.UART_data[2], Under_UART.UART_data[3] );
+    data_under_dps_pressure_hPa = Under_UART.UART_data[0];
+    data_under_dps_temperature_deg = Under_UART.UART_data[1];
+    data_under_dps_pressure_altitude_m = Under_UART.UART_data[2];
+    data_under_urm_sonic_altitude_m = Under_UART.UART_data[3];
+    sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", millis(), data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_pressure_altitude_m, data_under_urm_sonic_altitude_m );
     log_SD(SD_Under);
     digitalWrite(LED_Under, LOW);
   }
@@ -82,7 +97,12 @@ void ISR_readUART_500Hz() {
   readnum = Air_UART.readUART();
   if (readnum == 5) {
     digitalWrite(LED_Air, HIGH);
-    sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(), Air_UART.UART_data[0], Air_UART.UART_data[1], Air_UART.UART_data[2], Air_UART.UART_data[3], Air_UART.UART_data[4] );
+    data_air_dps_pressure_hPa = Air_UART.UART_data[0];
+    data_air_dps_temperature_deg = Air_UART.UART_data[1];
+    data_air_dps_altitude_m = Air_UART.UART_data[2];
+    data_air_sdp_differential_pressure_Pa = Air_UART.UART_data[3];
+    data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
+    sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(), data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differential_pressure_Pa, data_air_sdp_airspeed_mss );
     log_SD(SD_AirData);
     digitalWrite(LED_Air, LOW);
   }
