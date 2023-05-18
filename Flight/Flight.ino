@@ -188,7 +188,6 @@ void ISR_readI2C0_sendUART_100Hz() {
           data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
           data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz,
           data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
-  log_SD(UART_SD);
   SerialAir.print(UART_SD);
   SerialUnder.print(UART_SD);
 
@@ -273,9 +272,14 @@ void setup() {
     delay(400);
   }
 
-  NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 12);
-  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 13);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
-  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
+  // data label
+  sprintf(UART_SD, "time_ms,data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss, data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz,data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m\n");
+  SerialAir.print(UART_SD);
+  SerialUnder.print(UART_SD);
+
+  NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
+  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
+  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
   NVIC_SetPriority((IRQn_Type)TC5_IRQn, 15);
   Timer3.attachInterrupt(ISR_readI2C0_sendUART_100Hz).start(10000);
   Timer4.attachInterrupt(ISR_readUART_500Hz).start(2000);
