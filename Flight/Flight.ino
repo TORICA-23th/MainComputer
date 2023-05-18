@@ -62,8 +62,8 @@ float data_main_dps_altitude_m = 0;
 
 float data_under_dps_pressure_hPa = 0;
 float data_under_dps_temperature_deg = 0;
-float data_under_dps_pressure_altitude_m = 0;
-float data_under_urm_sonic_altitude_m = 0;
+float data_under_dps_altitude_m = 0;
+float data_under_urm_altitude_m = 0;
 
 float data_air_dps_pressure_hPa = 0;
 float data_air_dps_temperature_deg = 0;
@@ -71,11 +71,9 @@ float data_air_dps_altitude_m = 0;
 float data_air_sdp_differential_pressure_Pa = 0;
 float data_air_sdp_airspeed_mss = 0;
 
-// ----------------------------
+int data_ics_angle = 0;
 
-void log_SD(char data[BUFSIZE]) {
-  main_SD.add_str(data);
-}
+// ----------------------------
 
 void ISR_readUART_500Hz() {
   //  unsigned long time = micros();
@@ -86,10 +84,10 @@ void ISR_readUART_500Hz() {
     digitalWrite(LED_Under, HIGH);
     data_under_dps_pressure_hPa = Under_UART.UART_data[0];
     data_under_dps_temperature_deg = Under_UART.UART_data[1];
-    data_under_dps_pressure_altitude_m = Under_UART.UART_data[2];
-    data_under_urm_sonic_altitude_m = Under_UART.UART_data[3];
-    sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", millis(), data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_pressure_altitude_m, data_under_urm_sonic_altitude_m );
-    log_SD(SD_Under);
+    data_under_dps_altitude_m = Under_UART.UART_data[2];
+    data_under_urm_altitude_m = Under_UART.UART_data[3];
+    sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", millis(), data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m );
+    main_SD.add_str(SD_Under);
     digitalWrite(LED_Under, LOW);
   }
 
@@ -103,16 +101,16 @@ void ISR_readUART_500Hz() {
     data_air_sdp_differential_pressure_Pa = Air_UART.UART_data[3];
     data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
     sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(), data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differential_pressure_Pa, data_air_sdp_airspeed_mss );
-    log_SD(SD_AirData);
+    main_SD.add_str(SD_AirData);
     digitalWrite(LED_Air, LOW);
   }
 
   //ICS
-  int ics_angle = ics.read_Angle();
-  if (ics_angle > 0) {
+  data_ics_angle = ics.read_Angle();
+  if (data_ics_angle > 0) {
     digitalWrite(LED_ICS, HIGH);
-    sprintf(SD_ICS, "RUDDER,%d,%d\n", millis(), ics_angle );
-    log_SD(SD_ICS);
+    sprintf(SD_ICS, "RUDDER,%d,%d\n", millis(), data_ics_angle);
+    main_SD.add_str(SD_ICS);
     digitalWrite(LED_ICS, LOW);
   }
 
@@ -122,7 +120,7 @@ void ISR_readUART_500Hz() {
       sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6f,%.6f,%.2f\n", millis(),
               gps.time.hour(),    gps.time.minute(),  gps.time.second(),    gps.time.centisecond(),
               gps.location.lat(), gps.location.lng(), gps.altitude.meters() );
-      log_SD(SD_GPS);
+      main_SD.add_str(SD_GPS);
     }
   }
 
@@ -173,7 +171,7 @@ void ISR_readI2C0_sendUART_100Hz() {
   sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(),
           data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
           data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
-  log_SD(SD_IMU);
+  main_SD.add_str(SD_IMU);
 
   if (dps.temperatureAvailable() && dps.pressureAvailable()) {
     dps.getEvents(&temp_event, &pressure_event);
@@ -181,7 +179,7 @@ void ISR_readI2C0_sendUART_100Hz() {
     data_main_dps_temperature_deg = pressure_event.temperature;
     data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
     sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f,%.2f\n", millis(), data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
-    log_SD(SD_PRESSURE);
+    main_SD.add_str(SD_PRESSURE);
   }
 
   sprintf(UART_SD, "%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(),
