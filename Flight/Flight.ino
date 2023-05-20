@@ -48,38 +48,38 @@ bool timer_TBD_Hz = false;
 
 // ---- sensor data value  ----
 //    data_マイコン名_センサー名_データ種類_単位
-float data_main_bno_accx_mss = 0;
-float data_main_bno_accy_mss = 0;
-float data_main_bno_accz_mss = 0;
-float data_main_bno_qw = 0;
-float data_main_bno_qx = 0;
-float data_main_bno_qy = 0;
-float data_main_bno_qz = 0;
+volatile float data_main_bno_accx_mss = 0;
+volatile float data_main_bno_accy_mss = 0;
+volatile float data_main_bno_accz_mss = 0;
+volatile float data_main_bno_qw = 0;
+volatile float data_main_bno_qx = 0;
+volatile float data_main_bno_qy = 0;
+volatile float data_main_bno_qz = 0;
 
-float data_main_dps_pressure_hPa = 0;
-float data_main_dps_temperature_deg = 0;
-float data_main_dps_altitude_m = 0;
+volatile float data_main_dps_pressure_hPa = 0;
+volatile float data_main_dps_temperature_deg = 0;
+volatile float data_main_dps_altitude_m = 0;
 
-float data_under_dps_pressure_hPa = 0;
-float data_under_dps_temperature_deg = 0;
-float data_under_dps_altitude_m = 0;
-float data_under_urm_altitude_m = 0;
+volatile float data_under_dps_pressure_hPa = 0;
+volatile float data_under_dps_temperature_deg = 0;
+volatile float data_under_dps_altitude_m = 0;
+volatile float data_under_urm_altitude_m = 0;
 
-float data_air_dps_pressure_hPa = 0;
-float data_air_dps_temperature_deg = 0;
-float data_air_dps_altitude_m = 0;
-float data_air_sdp_differentialPressure_Pa = 0;
-float data_air_sdp_airspeed_mss = 0;
+volatile float data_air_dps_pressure_hPa = 0;
+volatile float data_air_dps_temperature_deg = 0;
+volatile float data_air_dps_altitude_m = 0;
+volatile float data_air_sdp_differentialPressure_Pa = 0;
+volatile float data_air_sdp_airspeed_mss = 0;
 
-int data_ics_angle = 0;
+volatile int data_ics_angle = 0;
 
-uint8_t data_main_gps_hour = 0;
-uint8_t data_main_gps_minute = 0;
-uint8_t data_main_gps_second = 0;
-uint8_t data_main_gps_centisecond = 0; 
-double data_main_gps_latitude_deg = 0;
-double data_main_gps_longitude_deg = 0;
-double data_main_gps_altitude_m = 0;
+volatile uint8_t data_main_gps_hour = 0;
+volatile uint8_t data_main_gps_minute = 0;
+volatile uint8_t data_main_gps_second = 0;
+volatile uint8_t data_main_gps_centisecond = 0;
+volatile double data_main_gps_latitude_deg = 0;
+volatile double data_main_gps_longitude_deg = 0;
+volatile double data_main_gps_altitude_m = 0;
 
 // ----------------------------
 
@@ -270,8 +270,7 @@ void setup() {
   Wire1.setClock(400000);
   //ToDo
 
-
-  //delay for sensor
+  //delay for sensor wake up
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_ICS, HIGH);
     digitalWrite(LED_Under, HIGH);
@@ -284,11 +283,6 @@ void setup() {
     digitalWrite(LED_SD, LOW);
     delay(400);
   }
-
-  // data label
-  sprintf(UART_SD, "time_ms,data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss, data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz,data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m\n");
-  SerialAir.print(UART_SD);
-  SerialUnder.print(UART_SD);
 
   NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
   NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
