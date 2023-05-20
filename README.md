@@ -5,9 +5,9 @@
 
 ## 一問一答
 ブログに書かない細かい話をここでまとめる
-## TORICA_UART
+### TORICA_UART
 - `int readnum = Under_UART.readUART();`のreadnumは何を表しているのか
-## TORICA_SD
+### TORICA_SD
 - SDカードはUART・I2C・SPIのうちどの規格で通信しているか
 - `cs_SD`とは何か
 - `main_SD.add_str()`と`main_SD.flash()`の違いは何か
@@ -23,7 +23,7 @@
 - `SerialGPS.available() > 0`と`gps.encode(SerialGPS.read())`は何が異なるのか
 - 精度よく緯度経度を表現するには小数点以下何桁必要か
 - GPSはどのような仕組みで測位を行うか
-## センサーデータの扱い
+### センサーデータの扱い
 - float，doubleそれぞれ有効桁数は何桁か
 - センサーデータを保存するグローバル変数はどのような命名規則か
 - センサーデータはどのレベルの[モジュール結合度](https://zenn.dev/taiga533/articles/e08ad4f4af5577079b5b)で扱っているか
@@ -50,7 +50,7 @@
 - メイン電装のプログラムで，タスクとその役割と優先度はどのようになっているか
 - (実測しないと分からんけど)各タスクは何ms程度の処理時間がかかるか
 
-## C言語の文法など
+### C言語の文法など
 - `&SerialUnder`の`&`とは何か
 - グローバル変数につく`volatile`とは何か
 - フォーマット指定子とは何か
