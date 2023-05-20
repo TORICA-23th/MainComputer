@@ -68,10 +68,18 @@ float data_under_urm_altitude_m = 0;
 float data_air_dps_pressure_hPa = 0;
 float data_air_dps_temperature_deg = 0;
 float data_air_dps_altitude_m = 0;
-float data_air_sdp_differential_pressure_Pa = 0;
+float data_air_sdp_differentialPressure_Pa = 0;
 float data_air_sdp_airspeed_mss = 0;
 
 int data_ics_angle = 0;
+
+uint8_t data_main_gps_hour = 0;
+uint8_t data_main_gps_minute = 0;
+uint8_t data_main_gps_second = 0;
+uint8_t data_main_gps_centisecond = 0; 
+double data_main_gps_latitude_deg = 0;
+double data_main_gps_longitude_deg = 0;
+double data_main_gps_altitude_m = 0;
 
 // ----------------------------
 
@@ -98,9 +106,9 @@ void ISR_readUART_500Hz() {
     data_air_dps_pressure_hPa = Air_UART.UART_data[0];
     data_air_dps_temperature_deg = Air_UART.UART_data[1];
     data_air_dps_altitude_m = Air_UART.UART_data[2];
-    data_air_sdp_differential_pressure_Pa = Air_UART.UART_data[3];
+    data_air_sdp_differentialPressure_Pa = Air_UART.UART_data[3];
     data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
-    sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(), data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differential_pressure_Pa, data_air_sdp_airspeed_mss );
+    sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(), data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss );
     main_SD.add_str(SD_AirData);
     digitalWrite(LED_Air, LOW);
   }
@@ -117,9 +125,16 @@ void ISR_readUART_500Hz() {
   //GPS
   while (SerialGPS.available() > 0) {
     if (gps.encode(SerialGPS.read())) {
-      sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6f,%.6f,%.2f\n", millis(),
-              gps.time.hour(),    gps.time.minute(),  gps.time.second(),    gps.time.centisecond(),
-              gps.location.lat(), gps.location.lng(), gps.altitude.meters() );
+      data_main_gps_hour = gps.time.hour();
+      data_main_gps_minute = gps.time.minute();
+      data_main_gps_second = gps.time.second();
+      data_main_gps_centisecond = gps.time.centisecond();
+      data_main_gps_latitude_deg = gps.location.lat();
+      data_main_gps_longitude_deg = gps.location.lng();
+      data_main_gps_altitude_m = gps.altitude.meters();
+      sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6lf,%.6lf,%.2lf\n", millis(),
+              data_main_gps_hour,         data_main_gps_minute,        data_main_gps_second,    data_main_gps_centisecond,
+              data_main_gps_latitude_deg, data_main_gps_longitude_deg, data_main_gps_altitude_m );
       main_SD.add_str(SD_GPS);
     }
   }
