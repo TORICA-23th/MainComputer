@@ -6,6 +6,11 @@
 #define SerialAir   Serial2
 #define SerialUnder Serial3
 
+#include <Geometry.h>
+using namespace Geometry;
+using namespace BLA;
+char TWE_BUF[256];
+
 #include <TORICA_SD.h>
 const int cs_SD = A8;
 TORICA_SD main_SD(cs_SD);
@@ -42,9 +47,6 @@ Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28, &Wire);
 #include <Adafruit_DPS310.h>
 Adafruit_DPS310 dps;
 sensors_event_t temp_event, pressure_event;
-
-bool timer_TBD_Hz = false;
-
 
 // ---- sensor data value  ----
 //    data_マイコン名_センサー名_データ種類_単位
@@ -83,10 +85,8 @@ volatile double data_main_gps_altitude_m = 0;
 
 // ----------------------------
 
-void ISR_readUART_200Hz() {
-  //  unsigned long time = micros();
-
-  
+void ISR_200Hz() {
+  //  uint32_t time = micros();
 
   //ICS
   data_ics_angle = ics.read_Angle();
@@ -96,8 +96,9 @@ void ISR_readUART_200Hz() {
     main_SD.add_str(SD_ICS);
     digitalWrite(LED_ICS, LOW);
   }
-  //DEBUG
+
   /*
+    //DEBUG
     if (micros() - time > 1900) {  //MAX2000=200Hz
     SerialUSB.print("ISR200Hz_overrun!!!");
     }
@@ -106,29 +107,9 @@ void ISR_readUART_200Hz() {
   */
 }
 
-#include <Geometry.h>
-using namespace Geometry;
-using namespace BLA;
-char TWE_BUF[256];
-/*void ISR_TWE_1_Hz() {
-  Quaternion qua(data_main_bno_qw, data_main_bno_qy, data_main_bno_qz, data_main_bno_qw);
-  EulerAngles euler(qua.to_rotation_matrix());
 
-  Serial1.print("+roll means left wing up\n");
-  //delay(10);
-  Serial1.print("pitch[deg] roll[deg] IAS[m/s]\n");
-  //delay(10);
-  sprintf(TWE_BUF, "%+06.2f     %+06.2f    %.2f\n", euler.second() * 180 / 3.1415 , -(euler.first() * 180 / 3.1415) , 0.0 );
-  Serial1.print(TWE_BUF);
-  Serial1.print("\n");
-  //delay(10);
-  Serial1.print("\n");
-  //delay(10);
-}*/
-
-
-void ISR_readI2C0_sendUART_100Hz() {
-  unsigned long time = micros();
+void ISR_100Hz() {
+  uint32_t time = micros();
 
   //UnderSide
   int readnum = Under_UART.readUART();
@@ -173,7 +154,7 @@ void ISR_readI2C0_sendUART_100Hz() {
       main_SD.add_str(SD_GPS);
     }
   }
-  
+
   imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
   imu::Quaternion quat = bno.getQuat();
   //imu::Vector<3> magnet = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    magnet.x()
@@ -201,6 +182,7 @@ void ISR_readI2C0_sendUART_100Hz() {
   }
 
   static int loop_count_sd = 0;
+  loop_count_sd++;
   if (loop_count_sd % 4 == 0) {
     sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f, %.2f,%.2f,%.2f, %.2f,%.2f, %d, %u,%u,%u.%u,%.7lf,%.7lf,%.7lf\n", millis(),
             data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
@@ -216,8 +198,6 @@ void ISR_readI2C0_sendUART_100Hz() {
     SerialAir.print(UART_SD);
     SerialUnder.print(UART_SD);
   }
-  loop_count_sd++;
-
 
   /*
     if (micros() - time > 9900) {  //MAX10000=100Hz
@@ -302,13 +282,11 @@ void setup() {
   NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
   NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
   NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
-  NVIC_SetPriority((IRQn_Type)TC5_IRQn, 15);
-  Timer3.attachInterrupt(ISR_readI2C0_sendUART_100Hz).start(10000);
-  Timer4.attachInterrupt(ISR_readUART_200Hz).start(2000);
-  //Timer5.attachInterrupt(ISR_TWE_1_Hz).start(1000000);
+  Timer3.attachInterrupt(ISR_100Hz).start(10000);
+  Timer4.attachInterrupt(ISR_200Hz).start(5000);
 }
 
-void loop() {  
+void loop() {
   if (main_SD.SDisActive) {
     digitalWrite(LED_SD, HIGH);
   }
@@ -317,31 +295,35 @@ void loop() {
 
   delay(10);
 
-  if (timer_TBD_Hz) {
-    timer_TBD_Hz = false;
+  uint32_t callout_now_time = millis();
+  static uint32_t callout_last_time = 0;
+  if (callout_now_time - callout_last_time >= 1000) {
+    callout_last_time = callout_now_time;
     callout_altitude();
   }
 
-  unsigned long now_time = millis();
-  static unsigned long last_time = 0;
-  
-  if (now_time - last_time >= 500){
-    last_time = now_time; 
-
-    Quaternion qua(data_main_bno_qw, data_main_bno_qy, data_main_bno_qz, data_main_bno_qw);
-    EulerAngles euler(qua.to_rotation_matrix());
-  
-    Serial1.print("+roll means left wing up\n");
-    //delay(10);
-    Serial1.print("pitch[deg] roll[deg] IAS[m/s]\n");
-    //delay(10);
-    sprintf(TWE_BUF, "%+06.2f     %+06.2f    %.2f\n", euler.second() * 180 / 3.1415 , -(euler.first() * 180 / 3.1415) , data_air_sdp_airspeed_mss);
-    Serial1.print(TWE_BUF);
-    Serial1.print("\n");
-    //delay(10);
-    Serial1.print("\n");
-    //delay(10);
+  uint32_t TWE_now_time = millis();
+  static uint32_t TWE_last_time = 0;
+  if (TWE_now_time - TWE_last_time >= 250) {
+    TWE_last_time = TWE_now_time;
+    TWE_downlink();
   }
+}
+
+void TWE_downlink() {
+  Quaternion qua(data_main_bno_qw, data_main_bno_qy, data_main_bno_qz, data_main_bno_qw);
+  EulerAngles euler(qua.to_rotation_matrix());
+
+  SerialTWE.print("+roll means left wing up\n");
+  //delay(10);
+  SerialTWE.print("pitch[deg] roll[deg] IAS[m/s]\n");
+  //delay(10);
+  sprintf(TWE_BUF, "%+06.2f     %+06.2f    %.2f\n", euler.second() * 180 / 3.1415 , -(euler.first() * 180 / 3.1415) , data_air_sdp_airspeed_mss);
+  SerialTWE.print(TWE_BUF);
+  SerialTWE.print("\n");
+  //delay(10);
+  SerialTWE.print("\n");
+  //delay(10);
 }
 
 void callout_altitude() {
