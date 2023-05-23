@@ -358,10 +358,7 @@ void TWE_downlink() {
   //delay(10);
   sprintf(TWE_BUF, "%+06.2f     %+06.2f    %.2f\n", euler.second() * 180 / 3.1415 , -(euler.first() * 180 / 3.1415) , data_air_sdp_airspeed_mss);
   SerialTWE.print(TWE_BUF);
-  SerialTWE.print("\n");
-  //delay(10);
-  SerialTWE.print("\n");
-  //delay(10);
+  SerialTWE.print("\n\n");
 }
 
 void callout_altitude() {
