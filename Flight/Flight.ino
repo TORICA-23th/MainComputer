@@ -228,6 +228,7 @@ void ISR_100Hz() {
     loop_count_sd=-1;
   }
   SerialAir.print(UART_SD);
+  delayMicroseconds(500);
   SerialUnder.print(UART_SD);
   loop_count_sd++;
 
