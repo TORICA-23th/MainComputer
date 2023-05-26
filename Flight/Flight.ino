@@ -103,12 +103,13 @@ void ISR_200Hz() {
 
 void ISR_100Hz() {
   uint32_t time = micros();
+  uint32_t time_ms = millis();
 
   //ICS
   data_ics_angle = ics.read_Angle();
   if (data_ics_angle > 0) {
     digitalWrite(LED_ICS, HIGH);
-    sprintf(SD_ICS, "RUDDER,%d,%d\n", millis(), data_ics_angle);
+    sprintf(SD_ICS, "RUDDER,%d,%d\n", time_ms, data_ics_angle);
     main_SD.add_str(SD_ICS);
     digitalWrite(LED_ICS, LOW);
   }
@@ -121,7 +122,7 @@ void ISR_100Hz() {
     data_under_dps_temperature_deg = Under_UART.UART_data[1];
     data_under_dps_altitude_m = Under_UART.UART_data[2];
     data_under_urm_altitude_m = Under_UART.UART_data[3];
-    sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", millis(), data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m );
+    sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m );
     main_SD.add_str(SD_Under);
     digitalWrite(LED_Under, LOW);
   }
@@ -135,7 +136,7 @@ void ISR_100Hz() {
     data_air_dps_altitude_m = Air_UART.UART_data[2];
     data_air_sdp_differentialPressure_Pa = Air_UART.UART_data[3];
     data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
-    sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(), data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss );
+    sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss );
     main_SD.add_str(SD_AirData);
     digitalWrite(LED_Air, LOW);
   }
@@ -150,7 +151,7 @@ void ISR_100Hz() {
       data_main_gps_latitude_deg = gps.location.lat();
       data_main_gps_longitude_deg = gps.location.lng();
       data_main_gps_altitude_m = gps.altitude.meters();
-      sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6lf,%.6lf,%.2lf\n", millis(),
+      sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6lf,%.6lf,%.2lf\n", time_ms,
               data_main_gps_hour,         data_main_gps_minute,        data_main_gps_second,    data_main_gps_centisecond,
               data_main_gps_latitude_deg, data_main_gps_longitude_deg, data_main_gps_altitude_m );
       main_SD.add_str(SD_GPS);
@@ -169,7 +170,7 @@ void ISR_100Hz() {
   data_main_bno_qx = quat.x();
   data_main_bno_qy = quat.y();
   data_main_bno_qz = quat.z();
-  sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", millis(),
+  sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms,
           data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
           data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
   main_SD.add_str(SD_IMU);
@@ -179,7 +180,7 @@ void ISR_100Hz() {
     data_main_dps_pressure_hPa = pressure_event.pressure;
     data_main_dps_temperature_deg = temp_event.temperature;
     data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
-    sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f,%.2f\n", millis(), data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
+    sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f,%.2f\n", time_ms, data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
     main_SD.add_str(SD_PRESSURE);
   }
 
@@ -202,7 +203,7 @@ void ISR_100Hz() {
     }*/
 
   if (loop_count_sd == 0) {
-    sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f,", millis(),
+    sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f,", time_ms,
             data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
             data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz
            );
