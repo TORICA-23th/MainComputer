@@ -88,14 +88,7 @@ volatile double data_main_gps_altitude_m = 0;
 void ISR_200Hz() {
   //  uint32_t time = micros();
 
-  //ICS
-  data_ics_angle = ics.read_Angle();
-  if (data_ics_angle > 0) {
-    digitalWrite(LED_ICS, HIGH);
-    sprintf(SD_ICS, "RUDDER,%d,%d\n", millis(), data_ics_angle);
-    main_SD.add_str(SD_ICS);
-    digitalWrite(LED_ICS, LOW);
-  }
+
 
   /*
     //DEBUG
@@ -110,6 +103,15 @@ void ISR_200Hz() {
 
 void ISR_100Hz() {
   uint32_t time = micros();
+
+  //ICS
+  data_ics_angle = ics.read_Angle();
+  if (data_ics_angle > 0) {
+    digitalWrite(LED_ICS, HIGH);
+    sprintf(SD_ICS, "RUDDER,%d,%d\n", millis(), data_ics_angle);
+    main_SD.add_str(SD_ICS);
+    digitalWrite(LED_ICS, LOW);
+  }
 
   //UnderSide
   int readnum = Under_UART.readUART();
@@ -228,13 +230,13 @@ void ISR_100Hz() {
   SerialUnder.print(UART_SD);
   loop_count_sd++;
 
-  /*
-    if (micros() - time > 9900) {  //MAX10000=100Hz
+
+  if (micros() - time > 9900) {  //MAX10000=100Hz
     SerialUSB.print("ISR100Hz_overrun!!!");
-    }
-    SerialUSB.print("ISR_us:");
-    SerialUSB.println(micros() - time);
-  */
+  }
+  SerialUSB.print("ISR_us:");
+  SerialUSB.println(micros() - time);
+
 }
 
 void setup() {
@@ -309,21 +311,20 @@ void setup() {
     delay(400);
   }
 
-  NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 13);
-  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 14);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
-  NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
+  NVIC_SetPriority((IRQn_Type)SysTick_IRQn, 14);
+  NVIC_SetPriority((IRQn_Type)TC3_IRQn, 15);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L17
+  //NVIC_SetPriority((IRQn_Type)TC4_IRQn, 15);  //https://github.com/ivanseidel/DueTimer/blob/master/DueTimer.cpp#L18
   Timer3.attachInterrupt(ISR_100Hz).start(10000);
-  Timer4.attachInterrupt(ISR_200Hz).start(5000);
+  //Timer4.attachInterrupt(ISR_200Hz).start(5000);
 }
 
 void loop() {
   if (main_SD.SDisActive) {
-    digitalWrite(LED_SD, HIGH);
+    digitalWrite(LED_SD, !digitalRead(LED_SD));
+  } else {
+    digitalWrite(LED_SD, LOW);
   }
   main_SD.flash();
-  digitalWrite(LED_SD, LOW);
-
-  delay(10);
 
   uint32_t callout_now_time = millis();
   static uint32_t callout_last_time = 0;
