@@ -182,9 +182,8 @@ void ISR_100Hz() {
   }
 
   static int loop_count_sd = 0;
-  loop_count_sd++;
-  if (loop_count_sd % 4 == 0) {
-    sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f, %.2f,%.2f,%.2f, %.2f,%.2f, %d, %u,%u,%u.%u,%.7lf,%.7lf,%.7lf\n", millis(),
+  /*if (loop_count_sd % 4 == 0){
+    sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f,    %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,     %.2f, %.2f,%.2f,%.2f, %.2f,%.2f, %d,  %u,%u,%u.%u,%10.7lf,%10.7lf,%5.2lf\n", millis(),
             data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
             data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz,
             data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
@@ -195,9 +194,39 @@ void ISR_100Hz() {
             data_main_gps_hour,  data_main_gps_minute,  data_main_gps_second, data_main_gps_centisecond,
             data_main_gps_latitude_deg,  data_main_gps_longitude_deg, data_main_gps_altitude_m
            );
+
     SerialAir.print(UART_SD);
     SerialUnder.print(UART_SD);
+    }*/
+
+  if (loop_count_sd % 4 == 0) {
+    sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f,", millis(),
+            data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
+            data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz
+           );
   }
+  else if (loop_count_sd % 4 == 1) {
+    sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
+            data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
+            data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m
+           );
+  }
+  else if (loop_count_sd % 4 == 2) {
+    sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f, %d,",
+            data_air_dps_pressure_hPa,  data_air_dps_temperature_deg,  data_air_dps_altitude_m,
+            data_air_sdp_differentialPressure_Pa,  data_air_sdp_airspeed_mss,
+            data_ics_angle
+           );
+  }
+  else {
+    sprintf(UART_SD, "%u,%u,%u.%u,%10.7lf,%10.7lf,%5.2lf\n",
+            data_main_gps_hour,  data_main_gps_minute,  data_main_gps_second, data_main_gps_centisecond,
+            data_main_gps_latitude_deg,  data_main_gps_longitude_deg, data_main_gps_altitude_m
+           );
+  }
+  SerialAir.print(UART_SD);
+  SerialUnder.print(UART_SD);
+  loop_count_sd++;
 
   /*
     if (micros() - time > 9900) {  //MAX10000=100Hz
