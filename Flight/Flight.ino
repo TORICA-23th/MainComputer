@@ -1,3 +1,4 @@
+#include "FreeStack.h"
 #include <DueTimer.h>
 
 #define SerialICS   Serial
@@ -310,6 +311,8 @@ void loop() {
   } else {
     digitalWrite(LED_SD, LOW);
   }
+  //SerialUSB.print("free stack : ");
+  //SerialUSB.println(FreeStack());
   //main_SD.flash();
 
   uint32_t callout_now_time = millis();
