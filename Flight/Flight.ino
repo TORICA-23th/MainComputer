@@ -185,23 +185,6 @@ void ISR_100Hz() {
   }
 
   static int loop_count_sd = 0;
-  /*if (loop_count_sd % 4 == 0){
-    sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f,    %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,     %.2f, %.2f,%.2f,%.2f, %.2f,%.2f, %d,  %u,%u,%u.%u,%10.7lf,%10.7lf,%5.2lf\n", millis(),
-            data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
-            data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz,
-            data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
-            data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m,
-            data_air_dps_pressure_hPa,  data_air_dps_temperature_deg,  data_air_dps_altitude_m,
-            data_air_sdp_differentialPressure_Pa,  data_air_sdp_airspeed_mss,
-            data_ics_angle,
-            data_main_gps_hour,  data_main_gps_minute,  data_main_gps_second, data_main_gps_centisecond,
-            data_main_gps_latitude_deg,  data_main_gps_longitude_deg, data_main_gps_altitude_m
-           );
-
-    SerialAir.print(UART_SD);
-    SerialUnder.print(UART_SD);
-    }*/
-
   if (loop_count_sd == 0) {
     sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f,", time_ms,
             data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
@@ -327,7 +310,7 @@ void loop() {
   } else {
     digitalWrite(LED_SD, LOW);
   }
-  main_SD.flash();
+  //main_SD.flash();
 
   uint32_t callout_now_time = millis();
   static uint32_t callout_last_time = 0;
