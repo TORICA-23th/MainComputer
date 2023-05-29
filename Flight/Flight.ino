@@ -13,6 +13,7 @@ using namespace BLA;
 char TWE_BUF[256];
 
 //SD系の初期設定
+#define SD_FAT_TYPE 0
 
 const uint8_t SD_CS_PIN = 28;
 #define SPI_CLOCK SD_SCK_MHZ(10)
