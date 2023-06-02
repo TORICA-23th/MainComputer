@@ -86,20 +86,20 @@ volatile double data_main_gps_altitude_m = 0;
 
 // ----------------------------
 
-void ISR_200Hz() {
+/*void ISR_200Hz() {
   //  uint32_t time = micros();
 
 
 
-  /*
+  
     //DEBUG
     if (micros() - time > 1900) {  //MAX2000=200Hz
     SerialUSB.print("ISR200Hz_overrun!!!");
     }
     SerialUSB.print("ISR_us:");
     SerialUSB.println(micros() - time);
-  */
-}
+  
+}*/
 
 
 void ISR_100Hz() {
@@ -210,11 +210,15 @@ void ISR_100Hz() {
             data_main_gps_hour,  data_main_gps_minute,  data_main_gps_second, data_main_gps_centisecond,
             data_main_gps_latitude_deg,  data_main_gps_longitude_deg, data_main_gps_altitude_m
            );
-    loop_count_sd=-1;
+    loop_count_sd = -1;
   }
   SerialAir.print(UART_SD);
+  //Serial.flush();
   delayMicroseconds(500);
   SerialUnder.print(UART_SD);
+  //Serial.flush();
+
+
   loop_count_sd++;
 
 
@@ -364,6 +368,10 @@ void loop() {
       TWE_last_time = TWE_now_time;
       TWE_downlink();
     }
+    
+    //Reset downlink type
+    TWE_downlink_type = 0;
+    
   }
 }
 
