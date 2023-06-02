@@ -1,4 +1,3 @@
-#include "FreeStack.h"
 #include <DueTimer.h>
 
 #define SerialICS   Serial
@@ -329,19 +328,23 @@ void loop() {
   uint32_t TWE_now_time = millis();
   static uint32_t TWE_last_time = 0;
   static uint8_t TWE_downlink_type = 0;
-  if (TWE_downlink_type == 0 && millis() > 4000) {
+  static uint32_t TWE_last_send_time = millis();
+  if (TWE_downlink_type == 0 && millis() - TWE_last_send_time >= 2000) {
     TWE_downlink_type++;
+    SerialTWE.print("\n\n\n");
     SerialTWE.print("MAIN\n");
     sprintf(TWE_BUF, "accX    accY    accZ\n%+06.2f  %+06.2f  %+06.2f\n", data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss);
     SerialTWE.print(TWE_BUF);
     sprintf(TWE_BUF, "qW      qX      qY      qZ\n%+06.2f  %+06.2f  %+06.2f  %+06.2f\n", data_main_bno_qw, data_main_bno_qx, data_main_bno_qy, data_main_bno_qz);
     SerialTWE.print(TWE_BUF);
-  } else if (TWE_downlink_type == 1 && millis() > 4200) {
+    TWE_last_send_time = millis();
+  } else if (TWE_downlink_type == 1 && millis() - TWE_last_send_time >= 200) {
     TWE_downlink_type++;
     sprintf(TWE_BUF, "pressure        temp    alt\n%+06.2f        %+06.2f  %+06.2f\n", data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
-  } else if (TWE_downlink_type == 2 && millis() > 4400) {
+    TWE_last_send_time = millis();
+  } else if (TWE_downlink_type == 2 && millis() - TWE_last_send_time >= 200) {
     TWE_downlink_type++;
     SerialTWE.print("UNDER\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m);
@@ -349,7 +352,8 @@ void loop() {
     sprintf(TWE_BUF, "sonic_alt\n%+06.2f\n", data_under_urm_altitude_m);
     SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
-  } else if (TWE_downlink_type == 3 && millis() > 4800) {
+    TWE_last_send_time = millis();
+  } else if (TWE_downlink_type == 3 && millis() - TWE_last_send_time >= 200) {
     TWE_downlink_type++;
     SerialTWE.print("AIR\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m);
@@ -357,21 +361,24 @@ void loop() {
     sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+08.3f        %+06.2f\n", data_air_sdp_differentialPressure_Pa,  data_air_sdp_airspeed_mss);
     SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
-  } else if (TWE_downlink_type == 4 && millis() > 5000) {
+    TWE_last_send_time = millis();
+  } else if (TWE_downlink_type == 4 && millis() - TWE_last_send_time >= 200) {
     TWE_downlink_type++;
     SerialTWE.print("ICS(joystick)\n");
     sprintf(TWE_BUF, "angle (center=7500)\n%d\n", data_ics_angle);
     SerialTWE.print(TWE_BUF);
-    SerialTWE.print("\n\n\n");
+    //Reset downlink type
+    TWE_downlink_type = 0;
+    TWE_last_send_time = millis();
+    TWE_last_time = 0;
   } else if (TWE_downlink_type == 5) {
     if (TWE_now_time - TWE_last_time >= 250) {
       TWE_last_time = TWE_now_time;
+      TWE_last_send_time = millis();
       TWE_downlink();
     }
     
-    //Reset downlink type
-    TWE_downlink_type = 0;
-    
+
   }
 }
 
