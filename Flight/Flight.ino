@@ -44,6 +44,10 @@ TinyGPSPlus gps;
 #include <utility/imumaths.h>
 Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28, &Wire);
 
+#include <TORICA_talk.h>
+TORICA_talk speaker; 
+
+
 #include <Adafruit_DPS310.h>
 Adafruit_DPS310 dps;
 sensors_event_t temp_event, pressure_event;
@@ -309,6 +313,18 @@ void setup() {
 }
 
 void loop() {
+
+  talk_str("koudowa");
+
+  talk_num(altitude);
+
+  Wire1.beginTransmission(0x2E); // スタートとスレーブアドレスを送る役割　（swの役割）
+  
+  Wir1e.write("de_su"); 
+  
+  Wire1.write('\r'); 
+  Wire1.endTransmission();  
+}
   if (main_SD.SDisActive) {
     digitalWrite(LED_SD, !digitalRead(LED_SD));
   } else {
