@@ -99,11 +99,10 @@ void setup() {
     delay(100);
   }
 
-  SerialGPS.begin(115200);
-  SerialICS.begin(115200);
+  SerialGPS.begin(115200); //SerialTWE
+  SerialICS.begin(115200); //SerialMainSD
   SerialAir.begin(460800);
   SerialUnder.begin(460800);
-  SerialMainSD.begin(460800);
   SerialUSB.begin(115200);
   SerialTWE.print("loading...\n\n");
 
