@@ -25,12 +25,12 @@ char UART_SD[512];
 TORICA_UART Under_UART(&SerialUnder);
 TORICA_UART Air_UART(&SerialAir);
 TORICA_UART Main_UART(&SerialMainSD);
-const int LED_Under = A12;
+const int LED_Under = 66;
 const int LED_Air = A11;
 
 #include <TORICA_ICS.h>
 TORICA_ICS ics(&SerialICS);
-const int LED_ICS = A13;
+const int LED_ICS = 67;
 
 #include <TinyGPSPlus.h>
 TinyGPSPlus gps;
@@ -106,7 +106,7 @@ void setup() {
   SerialMainSD.begin(460800);
   SerialUSB.begin(115200);
   SerialTWE.print("loading...\n\n");
-  
+
   Wire.setClock(400000);
   if (!dps.begin_I2C()) {  // Can pass in I2C address here
     //if (! dps.begin_SPI(DPS310_CS)) {  // If you want to use SPI
@@ -159,70 +159,58 @@ void loop() {
 
   uint32_t ISR_now_time = millis();
   static uint32_t ISR_last_time = 0;
-  if (ISR_now_time >= 10) {
+  if (ISR_now_time - ISR_last_time >= 10) {
     ISR_last_time = millis();
     ISR_100Hz();
   }
 
-  uint32_t TWE_now_time = millis();
-  static uint32_t TWE_last_time = 0;
   static uint8_t TWE_downlink_type = 0;
-  static uint32_t TWE_last_send_time = millis();
+  static uint32_t TWE_last_send_time = millis()-1000;
   if (TWE_downlink_type == 0 && millis() - TWE_last_send_time >= 2000) {
-    TWE_downlink_type++;
     SerialTWE.print("\n\n\n");
     SerialTWE.print("MAIN\n");
     sprintf(TWE_BUF, "accX    accY    accZ\n%+06.2f  %+06.2f  %+06.2f\n", data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss);
     SerialTWE.print(TWE_BUF);
     sprintf(TWE_BUF, "qW      qX      qY      qZ\n%+06.2f  %+06.2f  %+06.2f  %+06.2f\n", data_main_bno_qw, data_main_bno_qx, data_main_bno_qy, data_main_bno_qz);
     SerialTWE.print(TWE_BUF);
+    TWE_downlink_type++;
     TWE_last_send_time = millis();
   } else if (TWE_downlink_type == 1 && millis() - TWE_last_send_time >= 200) {
-    TWE_downlink_type++;
     sprintf(TWE_BUF, "pressure        temp    alt\n%+06.2f        %+06.2f  %+06.2f\n", data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
+    TWE_downlink_type++;
     TWE_last_send_time = millis();
   } else if (TWE_downlink_type == 2 && millis() - TWE_last_send_time >= 200) {
-    TWE_downlink_type++;
     SerialTWE.print("UNDER\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
     sprintf(TWE_BUF, "sonic_alt\n%+06.2f\n", data_under_urm_altitude_m);
     SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
+    TWE_downlink_type++;
     TWE_last_send_time = millis();
   } else if (TWE_downlink_type == 3 && millis() - TWE_last_send_time >= 200) {
-    TWE_downlink_type++;
     SerialTWE.print("AIR\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
     sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+08.3f        %+06.2f\n", data_air_sdp_differentialPressure_Pa,  data_air_sdp_airspeed_mss);
     SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
+    TWE_downlink_type++;
     TWE_last_send_time = millis();
   } else if (TWE_downlink_type == 4 && millis() - TWE_last_send_time >= 200) {
-    TWE_downlink_type++;
     SerialTWE.print("ICS(joystick)\n");
     sprintf(TWE_BUF, "angle (center=7500)\n%d\n", data_ics_angle);
     SerialTWE.print(TWE_BUF);
     //Reset downlink type
     TWE_downlink_type = 0;
     TWE_last_send_time = millis();
-    TWE_last_time = 0;
-  } else if (TWE_downlink_type == 5) {
-    if (TWE_now_time - TWE_last_time >= 250) {
-      TWE_last_time = TWE_now_time;
-      TWE_last_send_time = millis();
-      TWE_downlink();
-    }
-
-
   }
 }
 
 void ISR_100Hz() {
-  uint32_t time = micros();
+  uint32_t time_us = micros();
   uint32_t time_ms = millis();
 
   //ICS
@@ -337,26 +325,13 @@ void ISR_100Hz() {
   loop_count_sd++;
 
 
-  if (micros() - time > 9900) {  //MAX10000=100Hz
+  if (micros() - time_us > 9900) {  //MAX10000=100Hz
     SerialUSB.print("ISR100Hz_overrun!!!");
   }
   SerialUSB.print("ISR_us:");
-  SerialUSB.println(micros() - time);
+  SerialUSB.println(micros() - time_us);
 }
 
-
-void TWE_downlink() {
-  Quaternion qua(data_main_bno_qw, data_main_bno_qy, data_main_bno_qz, data_main_bno_qw);
-  EulerAngles euler(qua.to_rotation_matrix());
-
-  SerialTWE.print("+roll means left wing up\n");
-  //delay(10);
-  SerialTWE.print("pitch[deg] roll[deg] IAS[m/s]\n");
-  //delay(10);
-  sprintf(TWE_BUF, "%+06.2f     %+06.2f    %.2f\n", euler.second() * 180 / 3.1415 , -(euler.first() * 180 / 3.1415) , data_air_sdp_airspeed_mss);
-  SerialTWE.print(TWE_BUF);
-  SerialTWE.print("\n\n");
-}
 
 void callout_altitude() {
   //ToDo
