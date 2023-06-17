@@ -13,12 +13,12 @@ using namespace BLA;
 char TWE_BUF[256];
 
 #define BUFSIZE 256
-char SD_Under[BUFSIZE];
-char SD_AirData[BUFSIZE];
-char SD_ICS[BUFSIZE];
-char SD_IMU[BUFSIZE];
-char SD_PRESSURE[BUFSIZE];
-char SD_GPS[BUFSIZE];
+//char SD_Under[BUFSIZE];
+//char SD_AirData[BUFSIZE];
+//char SD_ICS[BUFSIZE];
+//char SD_IMU[BUFSIZE];
+//char SD_PRESSURE[BUFSIZE];
+//char SD_GPS[BUFSIZE];
 char UART_SD[512];
 
 #include <TORICA_UART.h>
@@ -54,6 +54,9 @@ volatile float data_main_bno_qw = 0;
 volatile float data_main_bno_qx = 0;
 volatile float data_main_bno_qy = 0;
 volatile float data_main_bno_qz = 0;
+volatile float data_main_bno_roll = 0;
+volatile float data_main_bno_pitch = 0;
+volatile float data_main_bno_yaw = 0;
 
 volatile float data_main_dps_pressure_hPa = 0;
 volatile float data_main_dps_temperature_deg = 0;
@@ -164,23 +167,23 @@ void loop() {
   }
 
   static uint8_t TWE_downlink_type = 0;
-  static uint32_t TWE_last_send_time = millis()-1000;
+  static uint32_t TWE_last_send_time = millis() - 1000;
   if (TWE_downlink_type == 0 && millis() - TWE_last_send_time >= 2000) {
     SerialTWE.print("\n\n\n");
     SerialTWE.print("MAIN\n");
     sprintf(TWE_BUF, "accX    accY    accZ\n%+06.2f  %+06.2f  %+06.2f\n", data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss);
     SerialTWE.print(TWE_BUF);
-    sprintf(TWE_BUF, "qW      qX      qY      qZ\n%+06.2f  %+06.2f  %+06.2f  %+06.2f\n", data_main_bno_qw, data_main_bno_qx, data_main_bno_qy, data_main_bno_qz);
+    sprintf(TWE_BUF, "roll(left+)   pitch   yaw\n%+06.2f        %+06.2f  %+06.2f\n", data_main_bno_roll, data_main_bno_pitch, data_main_bno_yaw);
     SerialTWE.print(TWE_BUF);
     TWE_downlink_type++;
     TWE_last_send_time = millis();
-  } else if (TWE_downlink_type == 1 && millis() - TWE_last_send_time >= 200) {
+  } else if (TWE_downlink_type == 1 && millis() - TWE_last_send_time >= 400) {
     sprintf(TWE_BUF, "pressure        temp    alt\n%+06.2f        %+06.2f  %+06.2f\n", data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
     TWE_downlink_type++;
     TWE_last_send_time = millis();
-  } else if (TWE_downlink_type == 2 && millis() - TWE_last_send_time >= 200) {
+  } else if (TWE_downlink_type == 2 && millis() - TWE_last_send_time >= 400) {
     SerialTWE.print("UNDER\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
@@ -189,7 +192,7 @@ void loop() {
     SerialTWE.print("\n");
     TWE_downlink_type++;
     TWE_last_send_time = millis();
-  } else if (TWE_downlink_type == 3 && millis() - TWE_last_send_time >= 200) {
+  } else if (TWE_downlink_type == 3 && millis() - TWE_last_send_time >= 400) {
     SerialTWE.print("AIR\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
@@ -198,7 +201,7 @@ void loop() {
     SerialTWE.print("\n");
     TWE_downlink_type++;
     TWE_last_send_time = millis();
-  } else if (TWE_downlink_type == 4 && millis() - TWE_last_send_time >= 200) {
+  } else if (TWE_downlink_type == 4 && millis() - TWE_last_send_time >= 400) {
     SerialTWE.print("ICS(joystick)\n");
     sprintf(TWE_BUF, "angle (center=7500)\n%d\n", data_ics_angle);
     SerialTWE.print(TWE_BUF);
@@ -212,13 +215,93 @@ void ISR_100Hz() {
   uint32_t time_us = micros();
   uint32_t time_ms = millis();
 
+  polling_UART();
+
+  static int loop_count = 0;
+  if (loop_count == 0) {
+    imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    imu::Quaternion quat = bno.getQuat();
+    //imu::Vector<3> magnet = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    magnet.x()
+    //imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);         gyro.x()
+    //imu::Vector<3> ground_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); ground_acc.x()
+    data_main_bno_accx_mss = accel.x();
+    data_main_bno_accy_mss = accel.y();
+    data_main_bno_accz_mss = accel.z();
+    data_main_bno_qw = quat.w();
+    data_main_bno_qx = quat.x();
+    data_main_bno_qy = quat.y();
+    data_main_bno_qz = quat.z();
+    Quaternion qua(data_main_bno_qx, data_main_bno_qy, data_main_bno_qz, data_main_bno_qw);
+    EulerAngles euler(qua.to_rotation_matrix());
+    data_main_bno_roll = -(euler.first() * 180 / 3.1415);
+    data_main_bno_pitch = euler.second() * 180 / 3.1415;
+    data_main_bno_yaw = euler.third() * 180 / 3.1415;
+    sprintf(UART_SD, "%d, %.2f,%.2f,%.2f,", time_ms,
+            data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss);
+    /*
+      sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms,
+            data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
+            data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
+    */
+    //SerialMainSD.print(SD_IMU);
+  }
+  else if (loop_count == 1) {
+    sprintf(UART_SD, "%.2f,%.2f,%.2f,%.2f, %.2f,%.2f,%.2f,",
+            data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz,
+            data_main_bno_roll, data_main_bno_pitch, data_main_bno_yaw);
+  }
+  else if (loop_count == 2) {
+    if (dps.temperatureAvailable() && dps.pressureAvailable()) {
+      dps.getEvents(&temp_event, &pressure_event);
+      data_main_dps_pressure_hPa = pressure_event.pressure;
+      data_main_dps_temperature_deg = temp_event.temperature;
+      data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
+      //sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f,%.2f\n", time_ms, data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
+      //SerialMainSD.print(SD_PRESSURE);
+    }
+    sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
+            data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
+            data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m
+           );
+  }
+  else if (loop_count == 3) {
+    sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f, %d,",
+            data_air_dps_pressure_hPa,  data_air_dps_temperature_deg,  data_air_dps_altitude_m,
+            data_air_sdp_differentialPressure_Pa,  data_air_sdp_airspeed_mss,
+            data_ics_angle
+           );
+  }
+  else {
+    sprintf(UART_SD, "%u,%u,%u.%u,%10.7lf,%10.7lf,%5.2lf\n",
+            data_main_gps_hour,  data_main_gps_minute,  data_main_gps_second, data_main_gps_centisecond,
+            data_main_gps_latitude_deg,  data_main_gps_longitude_deg, data_main_gps_altitude_m
+           );
+    loop_count = -1;
+  }
+  loop_count++;
+  //バッファをクリアしてから新しいデータを書き込み
+  SerialMainSD.flush();
+  SerialAir.flush();
+  SerialUnder.flush();
+  SerialMainSD.print(UART_SD);
+  SerialAir.print(UART_SD);
+  SerialUnder.print(UART_SD);
+
+  if (micros() - time_us > 9900) {  //MAX10000=100Hz
+    SerialUSB.print("ISR100Hz_overrun!!!");
+  }
+  SerialUSB.print("ISR_us:");
+  SerialUSB.println(micros() - time_us);
+}
+
+void polling_UART() {
   //ICS
   data_ics_angle = ics.read_Angle();
   if (data_ics_angle > 0) {
-    digitalWrite(LED_ICS, HIGH);
-    sprintf(SD_ICS, "RUDDER,%d,%d\n", time_ms, data_ics_angle);
+    digitalWrite(LED_ICS, !digitalRead(LED_ICS));
+    //sprintf(SD_ICS, "RUDDER,%d,%d\n", time_ms, data_ics_angle);
     //SerialMainSD.print(SD_ICS);
-    digitalWrite(LED_ICS, LOW);
+    //digitalWrite(LED_ICS, LOW);
   }
 
   //UnderSide
@@ -229,7 +312,7 @@ void ISR_100Hz() {
     data_under_dps_temperature_deg = Under_UART.UART_data[1];
     data_under_dps_altitude_m = Under_UART.UART_data[2];
     data_under_urm_altitude_m = Under_UART.UART_data[3];
-    sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m );
+    //sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m );
     //SerialMainSD.print(SD_Under);
     digitalWrite(LED_Under, LOW);
   }
@@ -243,7 +326,7 @@ void ISR_100Hz() {
     data_air_dps_altitude_m = Air_UART.UART_data[2];
     data_air_sdp_differentialPressure_Pa = Air_UART.UART_data[3];
     data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
-    sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss );
+    //sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss );
     //SerialMainSD.print(SD_AirData);
     digitalWrite(LED_Air, LOW);
   }
@@ -258,80 +341,14 @@ void ISR_100Hz() {
       data_main_gps_latitude_deg = gps.location.lat();
       data_main_gps_longitude_deg = gps.location.lng();
       data_main_gps_altitude_m = gps.altitude.meters();
-      sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6lf,%.6lf,%.2lf\n", time_ms,
+      /*
+        sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6lf,%.6lf,%.2lf\n", time_ms,
               data_main_gps_hour,         data_main_gps_minute,        data_main_gps_second,    data_main_gps_centisecond,
-              data_main_gps_latitude_deg, data_main_gps_longitude_deg, data_main_gps_altitude_m );
+              data_main_gps_latitude_deg, data_main_gps_longitude_deg, data_main_gps_altitude_m );*/
       //SerialMainSD.print(SD_GPS);
     }
   }
-
-  imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-  imu::Quaternion quat = bno.getQuat();
-  //imu::Vector<3> magnet = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    magnet.x()
-  //imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);         gyro.x()
-  //imu::Vector<3> ground_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); ground_acc.x()
-  data_main_bno_accx_mss = accel.x();
-  data_main_bno_accy_mss = accel.y();
-  data_main_bno_accz_mss = accel.z();
-  data_main_bno_qw = quat.w();
-  data_main_bno_qx = quat.x();
-  data_main_bno_qy = quat.y();
-  data_main_bno_qz = quat.z();
-  sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms,
-          data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
-          data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
-  //SerialMainSD.print(SD_IMU);
-
-  if (dps.temperatureAvailable() && dps.pressureAvailable()) {
-    dps.getEvents(&temp_event, &pressure_event);
-    data_main_dps_pressure_hPa = pressure_event.pressure;
-    data_main_dps_temperature_deg = temp_event.temperature;
-    data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
-    sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f,%.2f\n", time_ms, data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
-    //SerialMainSD.print(SD_PRESSURE);
-  }
-
-  static int loop_count_sd = 0;
-  if (loop_count_sd == 0) {
-    sprintf(UART_SD, "%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f,%.2f,", time_ms,
-            data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
-            data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz
-           );
-  }
-  else if (loop_count_sd == 1) {
-    sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
-            data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
-            data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m
-           );
-  }
-  else if (loop_count_sd == 2) {
-    sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f, %d,",
-            data_air_dps_pressure_hPa,  data_air_dps_temperature_deg,  data_air_dps_altitude_m,
-            data_air_sdp_differentialPressure_Pa,  data_air_sdp_airspeed_mss,
-            data_ics_angle
-           );
-  }
-  else {
-    sprintf(UART_SD, "%u,%u,%u.%u,%10.7lf,%10.7lf,%5.2lf\n",
-            data_main_gps_hour,  data_main_gps_minute,  data_main_gps_second, data_main_gps_centisecond,
-            data_main_gps_latitude_deg,  data_main_gps_longitude_deg, data_main_gps_altitude_m
-           );
-    loop_count_sd = -1;
-  }
-  SerialMainSD.print(UART_SD);
-  SerialAir.print(UART_SD);
-  SerialUnder.print(UART_SD);
-
-  loop_count_sd++;
-
-
-  if (micros() - time_us > 9900) {  //MAX10000=100Hz
-    SerialUSB.print("ISR100Hz_overrun!!!");
-  }
-  SerialUSB.print("ISR_us:");
-  SerialUSB.println(micros() - time_us);
 }
-
 
 void callout_altitude() {
   //ToDo
