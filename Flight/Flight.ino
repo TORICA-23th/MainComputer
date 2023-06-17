@@ -217,7 +217,8 @@ void ISR_100Hz() {
   if (data_ics_angle > 0) {
     digitalWrite(LED_ICS, HIGH);
     sprintf(SD_ICS, "RUDDER,%d,%d\n", time_ms, data_ics_angle);
-    //SerialMainSD.print(SD_ICS);
+    SerialMainSD.print(SD_ICS);
+    SerialMainSD.flush();
     digitalWrite(LED_ICS, LOW);
   }
 
@@ -230,7 +231,8 @@ void ISR_100Hz() {
     data_under_dps_altitude_m = Under_UART.UART_data[2];
     data_under_urm_altitude_m = Under_UART.UART_data[3];
     sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m );
-    //SerialMainSD.print(SD_Under);
+    SerialMainSD.print(SD_Under);
+    SerialMainSD.flush();
     digitalWrite(LED_Under, LOW);
   }
 
@@ -244,7 +246,8 @@ void ISR_100Hz() {
     data_air_sdp_differentialPressure_Pa = Air_UART.UART_data[3];
     data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
     sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss );
-    //SerialMainSD.print(SD_AirData);
+    SerialMainSD.print(SD_AirData);
+    SerialMainSD.flush();
     digitalWrite(LED_Air, LOW);
   }
 
@@ -261,26 +264,38 @@ void ISR_100Hz() {
       sprintf(SD_GPS, "GPS,%d,%d,%d,%d,%d,%.6lf,%.6lf,%.2lf\n", time_ms,
               data_main_gps_hour,         data_main_gps_minute,        data_main_gps_second,    data_main_gps_centisecond,
               data_main_gps_latitude_deg, data_main_gps_longitude_deg, data_main_gps_altitude_m );
-      //SerialMainSD.print(SD_GPS);
+      SerialMainSD.print(SD_GPS);
+      SerialMainSD.flush();
     }
   }
+  static int bno_loop_count = 0;
 
-  imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-  imu::Quaternion quat = bno.getQuat();
-  //imu::Vector<3> magnet = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    magnet.x()
-  //imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);         gyro.x()
-  //imu::Vector<3> ground_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); ground_acc.x()
-  data_main_bno_accx_mss = accel.x();
-  data_main_bno_accy_mss = accel.y();
-  data_main_bno_accz_mss = accel.z();
-  data_main_bno_qw = quat.w();
-  data_main_bno_qx = quat.x();
-  data_main_bno_qy = quat.y();
-  data_main_bno_qz = quat.z();
-  sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms,
-          data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
-          data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
-  //SerialMainSD.print(SD_IMU);
+  if(bno_loop_count == 0){
+    bno_loop_count++;
+    imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    imu::Quaternion quat = bno.getQuat();
+    //imu::Vector<3> magnet = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    magnet.x()
+    //imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);         gyro.x()
+    //imu::Vector<3> ground_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); ground_acc.x()
+    data_main_bno_accx_mss = accel.x();
+    data_main_bno_accy_mss = accel.y();
+    data_main_bno_accz_mss = accel.z();
+    data_main_bno_qw = quat.w();
+    data_main_bno_qx = quat.x();
+    data_main_bno_qy = quat.y();
+    data_main_bno_qz = quat.z();
+    sprintf(SD_IMU, "IMU,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms,
+            data_main_bno_accx_mss, data_main_bno_accy_mss, data_main_bno_accz_mss,
+            data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
+    SerialMainSD.print(SD_IMU);
+    SerialMainSD.flush();
+  }
+  else{
+    bno_loop_count++;
+    if(bno_loop_count == 4){
+      bno_loop_count = 0;
+    }
+  }
 
   if (dps.temperatureAvailable() && dps.pressureAvailable()) {
     dps.getEvents(&temp_event, &pressure_event);
@@ -288,7 +303,8 @@ void ISR_100Hz() {
     data_main_dps_temperature_deg = temp_event.temperature;
     data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
     sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f,%.2f\n", time_ms, data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
-    //SerialMainSD.print(SD_PRESSURE);
+    SerialMainSD.print(SD_PRESSURE);
+    SerialMainSD.flush();
   }
 
   static int loop_count_sd = 0;
@@ -318,7 +334,7 @@ void ISR_100Hz() {
            );
     loop_count_sd = -1;
   }
-  SerialMainSD.print(UART_SD);
+  //SerialMainSD.print(UART_SD);
   SerialAir.print(UART_SD);
   SerialUnder.print(UART_SD);
 
