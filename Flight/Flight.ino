@@ -307,20 +307,20 @@ void polling_UART() {
   //UnderSide
   int readnum = Under_UART.readUART();
   if (readnum == 4) {
-    digitalWrite(LED_Under, HIGH);
+    digitalWrite(LED_Under, !digitalRead(LED_Under));
     data_under_dps_pressure_hPa = Under_UART.UART_data[0];
     data_under_dps_temperature_deg = Under_UART.UART_data[1];
     data_under_dps_altitude_m = Under_UART.UART_data[2];
     data_under_urm_altitude_m = Under_UART.UART_data[3];
     //sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m );
     //SerialMainSD.print(SD_Under);
-    digitalWrite(LED_Under, LOW);
+    //digitalWrite(LED_Under, LOW);
   }
 
   //AirData
   readnum = Air_UART.readUART();
   if (readnum == 5) {
-    digitalWrite(LED_Air, HIGH);
+    digitalWrite(LED_Air, !digitalRead(LED_Air));
     data_air_dps_pressure_hPa = Air_UART.UART_data[0];
     data_air_dps_temperature_deg = Air_UART.UART_data[1];
     data_air_dps_altitude_m = Air_UART.UART_data[2];
@@ -328,7 +328,7 @@ void polling_UART() {
     data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
     //sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss );
     //SerialMainSD.print(SD_AirData);
-    digitalWrite(LED_Air, LOW);
+    //digitalWrite(LED_Air, LOW);
   }
 
   //GPS
