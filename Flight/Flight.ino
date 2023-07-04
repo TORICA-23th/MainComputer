@@ -46,14 +46,14 @@ Adafruit_DPS310 dps;
 sensors_event_t temp_event, pressure_event;
 
 
-//#include <おんせい>
+//#include "TORICA_talk.h"
 bool enable_callout = false;
 
-float accx_history_mss[10];
-const int accx_history_length = 10;
+float accx_history_mss[25];
+const int accx_history_length = 25;
 float accx_ave_mss = 0;
 
-float urm_altitude_history_m[10];
+float urm_altitude_history_m[3];
 const int urm_altitude_history_length = 3;
 float urm_altitude_ave_m = 0;
 
@@ -149,10 +149,13 @@ void setup() {
   }
 
   //for CALLOUT
-  Wire1.setClock(400000);
-  //ToDo
+  Wire1.begin();
+  Wire1.setClock(100000);
   for (int i = 0; i < accx_history_length; i++) {
     accx_history_mss[i] = 0;
+  }
+  for (int i = 0; i < urm_altitude_history_length; i++) {
+    urm_altitude_history_m[i] = 0;
   }
 
   //delay for sensor wake up
@@ -236,16 +239,34 @@ void ISR_100Hz() {
 
   polling_UART();
 
+  //発進判定のため，測定のみ100Hz
+  imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+  imu::Quaternion quat = bno.getQuat();
+  //imu::Vector<3> magnet = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    magnet.x()
+  //imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);         gyro.x()
+  //imu::Vector<3> ground_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); ground_acc.x()
+  data_main_bno_accx_mss = accel.x();
+  data_main_bno_accy_mss = accel.y();
+  data_main_bno_accz_mss = accel.z();
+  //ここから どうにかする
+  if (!enable_callout) {
+    accx_ave_mss = 0;
+    for (int i = accx_history_length - 1; i > 0; i--) {
+      accx_history_mss[i] = accx_history_mss[i - 1];
+      accx_ave_mss += accx_history_mss[i];
+    }
+    accx_history_mss[0] = data_main_bno_accx_mss;
+    accx_ave_mss += accx_history_mss[0];
+    accx_ave_mss /= accx_history_length;
+
+    if (accx_ave_mss < -1.0) {
+      enable_callout = true;
+    }
+  }
+  //ここまで
+
   static int loop_count = 0;
   if (loop_count == 0) {
-    imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-    imu::Quaternion quat = bno.getQuat();
-    //imu::Vector<3> magnet = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    magnet.x()
-    //imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);         gyro.x()
-    //imu::Vector<3> ground_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); ground_acc.x()
-    data_main_bno_accx_mss = accel.x();
-    data_main_bno_accy_mss = accel.y();
-    data_main_bno_accz_mss = accel.z();
     data_main_bno_qw = quat.w();
     data_main_bno_qx = quat.x();
     data_main_bno_qy = quat.y();
@@ -263,21 +284,6 @@ void ISR_100Hz() {
             data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
     */
     //SerialMainSD.print(SD_IMU);
-
-    if (!enable_callout) {
-      accx_ave_mss = 0;
-      for (int i = accx_history_length - 1; i > 0; i++) {
-        accx_history_mss[i] = accx_history_mss[i - 1];
-        accx_ave_mss += accx_history_mss[i];
-      }
-      accx_history_mss[0] = data_main_bno_accx_mss;
-      accx_ave_mss += accx_history_mss[0];
-      accx_ave_mss /= accx_history_length;
-
-      if (accx_ave_mss < -1.0) {
-        enable_callout = true;
-      }
-    }
   }
   else if (loop_count == 1) {
     sprintf(UART_SD, "%.2f,%.2f,%.2f,%.2f, %.2f,%.2f,%.2f,",
@@ -299,7 +305,7 @@ void ISR_100Hz() {
            );
     if (!enable_callout) {
       urm_altitude_ave_m = 0;
-      for (int i = urm_altitude_history_length - 1; i > 0; i++) {
+      for (int i = urm_altitude_history_length - 1; i > 0; i--) {
         urm_altitude_history_m[i] = urm_altitude_history_m[i - 1];
         urm_altitude_ave_m += urm_altitude_history_m[i];
       }
@@ -400,4 +406,11 @@ void polling_UART() {
 
 void callout_altitude() {
   //ToDo
+  Wire1.beginTransmission(0x2E); // スタートとスレーブアドレスを送る役割　（swの役割）
+
+  char str[] = "taketake";
+  Wire1.write(str, strlen(str)*sizeof(char));
+  Wire1.write('\r');
+
+  Wire1.endTransmission();    // stop transmitting
 }
