@@ -45,6 +45,20 @@ Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28, &Wire);
 Adafruit_DPS310 dps;
 sensors_event_t temp_event, pressure_event;
 
+
+//#include <おんせい>
+bool enable_callout = false;
+
+float accx_history_mss[10];
+const int accx_history_length = 10;
+float accx_ave_mss = 0;
+
+float urm_altitude_history_m[10];
+const int urm_altitude_history_length = 3;
+float urm_altitude_ave_m = 0;
+
+
+
 // ---- sensor data value  ----
 //    data_マイコン名_センサー名_データ種類_単位
 volatile float data_main_bno_accx_mss = 0;
@@ -137,6 +151,9 @@ void setup() {
   //for CALLOUT
   Wire1.setClock(400000);
   //ToDo
+  for (int i = 0; i < accx_history_length; i++) {
+    accx_history_mss[i] = 0;
+  }
 
   //delay for sensor wake up
   for (int i = 0; i < 3; i++) {
@@ -156,7 +173,9 @@ void loop() {
   static uint32_t callout_last_time = 0;
   if (callout_now_time - callout_last_time >= 1000) {
     callout_last_time = callout_now_time;
-    callout_altitude();
+    if (enable_callout) {
+      callout_altitude();
+    }
   }
 
   uint32_t ISR_now_time = millis();
@@ -244,6 +263,21 @@ void ISR_100Hz() {
             data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
     */
     //SerialMainSD.print(SD_IMU);
+
+    if (!enable_callout) {
+      accx_ave_mss = 0;
+      for (int i = accx_history_length - 1; i > 0; i++) {
+        accx_history_mss[i] = accx_history_mss[i - 1];
+        accx_ave_mss += accx_history_mss[i];
+      }
+      accx_history_mss[0] = data_main_bno_accx_mss;
+      accx_ave_mss += accx_history_mss[0];
+      accx_ave_mss /= accx_history_length;
+
+      if (accx_ave_mss < -1.0) {
+        enable_callout = true;
+      }
+    }
   }
   else if (loop_count == 1) {
     sprintf(UART_SD, "%.2f,%.2f,%.2f,%.2f, %.2f,%.2f,%.2f,",
@@ -263,6 +297,20 @@ void ISR_100Hz() {
             data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
             data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m
            );
+    if (!enable_callout) {
+      urm_altitude_ave_m = 0;
+      for (int i = urm_altitude_history_length - 1; i > 0; i++) {
+        urm_altitude_history_m[i] = urm_altitude_history_m[i - 1];
+        urm_altitude_ave_m += urm_altitude_history_m[i];
+      }
+      urm_altitude_history_m[0] = data_under_urm_altitude_m;
+      urm_altitude_ave_m += urm_altitude_history_m[0];
+      urm_altitude_ave_m /= urm_altitude_history_length;
+
+      if (urm_altitude_ave_m > 9.0) {
+        enable_callout = true;
+      }
+    }
   }
   else if (loop_count == 3) {
     sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f, %d,",
