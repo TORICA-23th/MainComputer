@@ -49,9 +49,22 @@ sensors_event_t temp_event, pressure_event;
 //#include "TORICA_talk.h"
 bool enable_callout = false;
 
-float accx_history_mss[25];
-const int accx_history_length = 25;
+float accx_history_mss[20];
+const int accx_history_length = 20;
 float accx_ave_mss = 0;
+
+//長谷部が追加
+float velx_history_ms[20];
+const int velx_history_length = 20;
+float velx_ave_ms = 0;
+
+const float FilterCoefficient = 0.65;
+float lowpass = 0;
+float highpass = 0;
+
+const float Time_interval = 0.04;
+float oldAcc = 0;
+
 
 float urm_altitude_history_m[3];
 const int urm_altitude_history_length = 3;
@@ -154,9 +167,13 @@ void setup() {
   for (int i = 0; i < accx_history_length; i++) {
     accx_history_mss[i] = 0;
   }
+  for (int i = 0; i < velx_history_length; i++){
+    velx_history_ms[i] = 0;
+  }
   for (int i = 0; i < urm_altitude_history_length; i++) {
     urm_altitude_history_m[i] = 0;
   }
+ 
 
   //delay for sensor wake up
   for (int i = 0; i < 3; i++) {
@@ -177,7 +194,7 @@ void loop() {
   if (callout_now_time - callout_last_time >= 1000) {
     callout_last_time = callout_now_time;
     if (enable_callout) {
-      callout_altitude();
+      //callout_altitude();
     }
   }
 
@@ -248,21 +265,40 @@ void ISR_100Hz() {
   data_main_bno_accx_mss = accel.x();
   data_main_bno_accy_mss = accel.y();
   data_main_bno_accz_mss = accel.z();
-  //ここから どうにかする
+  //ここから どうにかする FLAG
   if (!enable_callout) {
     accx_ave_mss = 0;
     for (int i = accx_history_length - 1; i > 0; i--) {
       accx_history_mss[i] = accx_history_mss[i - 1];
       accx_ave_mss += accx_history_mss[i];
     }
-    accx_history_mss[0] = data_main_bno_accx_mss;
+    accx_history_mss[0] = (-1)*data_main_bno_accx_mss;
     accx_ave_mss += accx_history_mss[0];
     accx_ave_mss /= accx_history_length;
 
-    if (accx_ave_mss < -1.0) {
+    velx_ave_ms = 0;
+    for (int i = velx_history_length - 1; i > 0; i--){
+      velx_history_ms[i] = velx_history_ms[i - 1];
+      velx_ave_ms += velx_history_ms[i];
+    }
+
+    lowpass = lowpass * FilterCoefficient + accx_ave_mss * (1 - FilterCoefficient);
+    highpass = accx_ave_mss - lowpass;
+
+    velx_history_ms[0] = ((highpass + oldAcc) * Time_interval) / 2 + velx_history_ms[1];
+    oldAcc = highpass;
+
+    velx_ave_ms += velx_history_ms[0];
+    velx_ave_ms /= velx_history_length;
+
+    if (velx_ave_ms > 0.4) {
       enable_callout = true;
     }
+
+    SerialUSB.println(velx_ave_ms);
   }
+
+
   //ここまで
 
   static int loop_count = 0;
@@ -303,7 +339,7 @@ void ISR_100Hz() {
             data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
             data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m
            );
-    if (!enable_callout) {
+    /*if (!enable_callout) {
       urm_altitude_ave_m = 0;
       for (int i = urm_altitude_history_length - 1; i > 0; i--) {
         urm_altitude_history_m[i] = urm_altitude_history_m[i - 1];
@@ -316,7 +352,7 @@ void ISR_100Hz() {
       if (urm_altitude_ave_m > 9.0) {
         enable_callout = true;
       }
-    }
+    }*/
   }
   else if (loop_count == 3) {
     sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f, %d,",
@@ -408,7 +444,7 @@ void callout_altitude() {
   //ToDo
   Wire1.beginTransmission(0x2E); // スタートとスレーブアドレスを送る役割　（swの役割）
 
-  char str[] = "taketake";
+  char str[] = "teikuohu";
   Wire1.write(str, strlen(str)*sizeof(char));
   Wire1.write('\r');
 
