@@ -1,11 +1,11 @@
 #include <DueTimer.h>
 
-#define SerialAir   Serial
-#define SerialGPS   Serial1
-#define SerialTWE   Serial1
+#define SerialAir Serial
+#define SerialGPS Serial1
+#define SerialTWE Serial1
 #define SerialUnder Serial2
 #define SerialMainSD Serial3
-#define SerialICS   Serial3
+#define SerialICS Serial3
 
 #include <Geometry.h>
 using namespace Geometry;
@@ -70,6 +70,30 @@ float urm_altitude_history_m[3];
 const int urm_altitude_history_length = 3;
 float urm_altitude_ave_m = 0;
 
+// callput value
+#include "MovingAverageFloat.h"
+MovingAverageFloat<10> filtered_airspeed_ms;
+
+// filtered:移動平均
+// lake:対地高度, 無印:気圧基準海抜高度
+// dps:気圧高度
+// urm:超音波高度
+
+// 現在の気圧高度
+MovingAverageFloat<5> filtered_main_dps_altitude_m;
+MovingAverageFloat<5> filtered_under_dps_altitude_m;
+MovingAverageFloat<5> filtered_air_dps_altitude_m;
+// プラホの高度
+MovingAverageFloat<50> main_dps_altitude_platform_m;
+MovingAverageFloat<50> under_dps_altitude_platform_m;
+MovingAverageFloat<50> air_dps_altitude_platform_m;
+
+#include "QuickStats.h"
+// 3つの気圧高度にそれぞれ移動平均をとってプラホを10mとし，中央値をとった値で，気圧センサを用いた信頼できる対地高度．
+float dps_altitude_lake_array_m[3];
+QuickStats dps_altitude_lake_m;
+
+float estimated_altitude_lake_m = 10.0;
 
 
 // ---- sensor data value  ----
@@ -129,8 +153,8 @@ void setup() {
     delay(100);
   }
 
-  SerialGPS.begin(115200); //SerialTWE
-  SerialICS.begin(115200); //SerialMainSD
+  SerialGPS.begin(115200);  //SerialTWE
+  SerialICS.begin(115200);  //SerialMainSD
   SerialAir.begin(460800);
   SerialUnder.begin(460800);
   SerialUSB.begin(115200);
@@ -167,13 +191,13 @@ void setup() {
   for (int i = 0; i < accx_history_length; i++) {
     accx_history_mss[i] = 0;
   }
-  for (int i = 0; i < velx_history_length; i++){
+  for (int i = 0; i < velx_history_length; i++) {
     velx_history_ms[i] = 0;
   }
   for (int i = 0; i < urm_altitude_history_length; i++) {
     urm_altitude_history_m[i] = 0;
   }
- 
+
 
   //delay for sensor wake up
   for (int i = 0; i < 3; i++) {
@@ -188,7 +212,18 @@ void setup() {
   }
 }
 
+
 void loop() {
+
+  uint32_t ISR_now_time = millis();
+  static uint32_t ISR_last_time = 0;
+  if (ISR_now_time - ISR_last_time >= 10) {
+    ISR_last_time = millis();
+    ISR_100Hz();
+  }
+
+  calculate_altitude();
+
   uint32_t callout_now_time = millis();
   static uint32_t callout_last_time = 0;
   if (callout_now_time - callout_last_time >= 1000) {
@@ -196,13 +231,6 @@ void loop() {
     if (enable_callout) {
       //callout_altitude();
     }
-  }
-
-  uint32_t ISR_now_time = millis();
-  static uint32_t ISR_last_time = 0;
-  if (ISR_now_time - ISR_last_time >= 10) {
-    ISR_last_time = millis();
-    ISR_100Hz();
   }
 
   static uint8_t TWE_downlink_type = 0;
@@ -235,7 +263,7 @@ void loop() {
     SerialTWE.print("AIR\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
-    sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+08.3f        %+06.2f\n", data_air_sdp_differentialPressure_Pa,  data_air_sdp_airspeed_mss);
+    sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+08.3f        %+06.2f\n", data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss);
     SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
     TWE_downlink_type++;
@@ -249,6 +277,7 @@ void loop() {
     TWE_last_send_time = millis();
   }
 }
+
 
 void ISR_100Hz() {
   uint32_t time_us = micros();
@@ -272,12 +301,12 @@ void ISR_100Hz() {
       accx_history_mss[i] = accx_history_mss[i - 1];
       accx_ave_mss += accx_history_mss[i];
     }
-    accx_history_mss[0] = (-1)*data_main_bno_accx_mss;
+    accx_history_mss[0] = (-1) * data_main_bno_accx_mss;
     accx_ave_mss += accx_history_mss[0];
     accx_ave_mss /= accx_history_length;
 
     velx_ave_ms = 0;
-    for (int i = velx_history_length - 1; i > 0; i--){
+    for (int i = velx_history_length - 1; i > 0; i--) {
       velx_history_ms[i] = velx_history_ms[i - 1];
       velx_ave_ms += velx_history_ms[i];
     }
@@ -320,13 +349,11 @@ void ISR_100Hz() {
             data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz );
     */
     //SerialMainSD.print(SD_IMU);
-  }
-  else if (loop_count == 1) {
+  } else if (loop_count == 1) {
     sprintf(UART_SD, "%.2f,%.2f,%.2f,%.2f, %.2f,%.2f,%.2f,",
-            data_main_bno_qw,   data_main_bno_qx,   data_main_bno_qy,   data_main_bno_qz,
+            data_main_bno_qw, data_main_bno_qx, data_main_bno_qy, data_main_bno_qz,
             data_main_bno_roll, data_main_bno_pitch, data_main_bno_yaw);
-  }
-  else if (loop_count == 2) {
+  } else if (loop_count == 2) {
     if (dps.temperatureAvailable() && dps.pressureAvailable()) {
       dps.getEvents(&temp_event, &pressure_event);
       data_main_dps_pressure_hPa = pressure_event.pressure;
@@ -334,11 +361,14 @@ void ISR_100Hz() {
       data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
       //sprintf(SD_PRESSURE, "PRESSURE,%d,%.2f,%.2f,%.2f\n", time_ms, data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m);
       //SerialMainSD.print(SD_PRESSURE);
+      filtered_main_dps_altitude_m.add(data_main_dps_altitude_m);
+      if (!enable_callout) {
+        main_dps_altitude_platform_m.add(data_main_dps_altitude_m);
+      }
     }
     sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
             data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
-            data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m
-           );
+            data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m);
     /*if (!enable_callout) {
       urm_altitude_ave_m = 0;
       for (int i = urm_altitude_history_length - 1; i > 0; i--) {
@@ -353,19 +383,15 @@ void ISR_100Hz() {
         enable_callout = true;
       }
     }*/
-  }
-  else if (loop_count == 3) {
+  } else if (loop_count == 3) {
     sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f, %d,",
-            data_air_dps_pressure_hPa,  data_air_dps_temperature_deg,  data_air_dps_altitude_m,
-            data_air_sdp_differentialPressure_Pa,  data_air_sdp_airspeed_mss,
-            data_ics_angle
-           );
-  }
-  else {
+            data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m,
+            data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss,
+            data_ics_angle);
+  } else {
     sprintf(UART_SD, "%u,%u,%u.%u,%10.7lf,%10.7lf,%5.2lf\n",
-            data_main_gps_hour,  data_main_gps_minute,  data_main_gps_second, data_main_gps_centisecond,
-            data_main_gps_latitude_deg,  data_main_gps_longitude_deg, data_main_gps_altitude_m
-           );
+            data_main_gps_hour, data_main_gps_minute, data_main_gps_second, data_main_gps_centisecond,
+            data_main_gps_latitude_deg, data_main_gps_longitude_deg, data_main_gps_altitude_m);
     loop_count = -1;
   }
   loop_count++;
@@ -383,6 +409,7 @@ void ISR_100Hz() {
   SerialUSB.print("ISR_us:");
   SerialUSB.println(micros() - time_us);
 }
+
 
 void polling_UART() {
   //ICS
@@ -405,6 +432,10 @@ void polling_UART() {
     //sprintf(SD_Under, "UNDER,%d,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m );
     //SerialMainSD.print(SD_Under);
     //digitalWrite(LED_Under, LOW);
+    filtered_under_dps_altitude_m.add(data_under_dps_altitude_m);
+    if (!enable_callout) {
+      under_dps_altitude_platform_m.add(data_under_dps_altitude_m);
+    }
   }
 
   //AirData
@@ -416,9 +447,14 @@ void polling_UART() {
     data_air_dps_altitude_m = Air_UART.UART_data[2];
     data_air_sdp_differentialPressure_Pa = Air_UART.UART_data[3];
     data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
+    filtered_airspeed_ms.add(data_air_sdp_airspeed_mss);
     //sprintf(SD_AirData, "AIR,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n", time_ms, data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m, data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss );
     //SerialMainSD.print(SD_AirData);
     //digitalWrite(LED_Air, LOW);
+    filtered_air_dps_altitude_m.add(data_air_dps_altitude_m);
+    if (!enable_callout) {
+      air_dps_altitude_platform_m.add(data_air_dps_altitude_m);
+    }
   }
 
   //GPS
@@ -440,13 +476,31 @@ void polling_UART() {
   }
 }
 
+
+void calculate_altitude() {
+  dps_altitude_lake_array_m[0] = filtered_main_dps_altitude_m.get() - main_dps_altitude_platform_m.get() + 10.0;
+  dps_altitude_lake_array_m[1] = filtered_under_dps_altitude_m.get() - under_dps_altitude_platform_m.get() + 10.0;
+  dps_altitude_lake_array_m[2] = filtered_air_dps_altitude_m.get() - air_dps_altitude_platform_m.get() + 10.0;
+
+  dps_altitude_lake_m.median(dps_altitude_lake_array_m, 3);
+}
+
+
 void callout_altitude() {
   //ToDo
-  Wire1.beginTransmission(0x2E); // スタートとスレーブアドレスを送る役割　（swの役割）
+  Wire1.beginTransmission(0x2E);  // スタートとスレーブアドレスを送る役割　（swの役割）
 
   char str[] = "teikuohu";
-  Wire1.write(str, strlen(str)*sizeof(char));
+  Wire1.write(str, strlen(str) * sizeof(char));
   Wire1.write('\r');
 
-  Wire1.endTransmission();    // stop transmitting
+  Wire1.endTransmission();  // stop transmitting
+
+  static int step_altitude_lake_m = 10;
+  if (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
+    step_altitude_lake_m--;
+    //callout_altitude(step_altitude_lake_m);
+  } else {
+    //callout_airspeed(filtered_airspeed_ms.get());
+  }
 }
