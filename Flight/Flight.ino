@@ -42,7 +42,7 @@ TinyGPSPlus gps;
 Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28, &Wire);
 
 #include <TORICA_talk.h>
-TORICA_talk speaker; 
+TORICA_talk speaker;
 
 
 #include <Adafruit_DPS310.h>
@@ -230,10 +230,12 @@ void loop() {
 
   uint32_t callout_now_time = millis();
   static uint32_t callout_last_time = 0;
-  if (callout_now_time - callout_last_time >= 1000) {
+
+  if (callout_now_time - callout_last_time >= 2000) {
     callout_last_time = callout_now_time;
+    //callout_status();
     if (enable_callout) {
-      //callout_altitude();
+      callout_status();
     }
   }
 
@@ -276,6 +278,13 @@ void loop() {
     SerialTWE.print("ICS(joystick)\n");
     sprintf(TWE_BUF, "angle (center=7500)\n%d\n", data_ics_angle);
     SerialTWE.print(TWE_BUF);
+
+
+    SerialTWE.print("estimated_altitude_lake_m\n");
+    sprintf(TWE_BUF, "%+08.3f\n", estimated_altitude_lake_m);
+    SerialTWE.print(TWE_BUF);
+
+
     //Reset downlink type
     TWE_downlink_type = 0;
     TWE_last_send_time = millis();
@@ -373,7 +382,7 @@ void ISR_100Hz() {
     sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
             data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
             data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m);
-    /*if (!enable_callout) {
+    if (!enable_callout) {
       urm_altitude_ave_m = 0;
       for (int i = urm_altitude_history_length - 1; i > 0; i--) {
         urm_altitude_history_m[i] = urm_altitude_history_m[i - 1];
@@ -386,7 +395,7 @@ void ISR_100Hz() {
       if (urm_altitude_ave_m > 9.0) {
         enable_callout = true;
       }
-    }*/
+    }
   } else if (loop_count == 3) {
     sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f, %d,",
             data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m,
@@ -486,25 +495,30 @@ void calculate_altitude() {
   dps_altitude_lake_array_m[1] = filtered_under_dps_altitude_m.get() - under_dps_altitude_platform_m.get() + 10.0;
   dps_altitude_lake_array_m[2] = filtered_air_dps_altitude_m.get() - air_dps_altitude_platform_m.get() + 10.0;
 
-  dps_altitude_lake_m.median(dps_altitude_lake_array_m, 3);
+  estimated_altitude_lake_m = dps_altitude_lake_m.median(dps_altitude_lake_array_m, 3);
+
+  //ToDo 超音波統合
 }
 
 
-void callout_altitude() {
+void callout_status() {
   //ToDo
-  Wire1.beginTransmission(0x2E);  // スタートとスレーブアドレスを送る役割　（swの役割）
+  /* Wire1.beginTransmission(0x2E);  // スタートとスレーブアドレスを送る役割　（swの役割）
 
-  char str[] = "teikuohu";
-  Wire1.write(str, strlen(str) * sizeof(char));
-  Wire1.write('\r');
+    char str[] = "teikuohu";
+    Wire1.write(str, strlen(str) * sizeof(char));
+    Wire1.write('\r');
 
-  Wire1.endTransmission();  // stop transmitting
+    Wire1.endTransmission();  // stop transmittig*/
 
   static int step_altitude_lake_m = 10;
   if (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
     step_altitude_lake_m--;
-    //callout_altitude(step_altitude_lake_m);
+    while (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
+      step_altitude_lake_m--;
+    }
+    speaker.callout_altitude(step_altitude_lake_m);
   } else {
-    //callout_airspeed(filtered_airspeed_ms.get());
+    speaker.callout_airspeed(filtered_airspeed_ms.get());
   }
 }
