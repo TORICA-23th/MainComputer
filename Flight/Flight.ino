@@ -34,17 +34,22 @@ TinyGPSPlus gps;
 #include <utility/imumaths.h>
 Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28, &Wire);
 
-#include <TORICA_talk.h>
-TORICA_talk speaker;
-
-
 #include <Adafruit_DPS310.h>
 Adafruit_DPS310 dps;
 sensors_event_t temp_event, pressure_event;
 
+#include <TORICA_talk.h>
+TORICA_talk speaker;
 
-//#include "TORICA_talk.h"
-bool enable_callout = false;
+enum {
+  PLATFORM,
+  TAKEOFF,
+  HIGH_LEVEL,
+  MID_LEVEL,
+  LOW_LEVEL
+} flight_phase = PLATFORM;
+
+
 
 float accx_history_mss[20];
 const int accx_history_length = 20;
@@ -62,14 +67,14 @@ float highpass = 0;
 const float Time_interval = 0.04;
 float oldAcc = 0;
 
-// callput value
-#include "MovingAverageFloat.h"
-MovingAverageFloat<10> filtered_airspeed_ms;
 
 // filtered:移動平均
 // lake:対地高度, 無印:気圧基準海抜高度
 // dps:気圧高度
 // urm:超音波高度
+
+#include "MovingAverageFloat.h"
+MovingAverageFloat<10> filtered_airspeed_ms;
 
 // 現在の気圧高度
 MovingAverageFloat<5> filtered_main_dps_altitude_m;
@@ -90,6 +95,7 @@ MovingAverageFloat<3> filtered_under_urm_altitude_m;
 float estimated_altitude_lake_m = 10.0;
 
 unsigned long int last_under_time_ms = 0;
+
 
 // ---- sensor data value  ----
 //    data_マイコン名_センサー名_データ種類_単位
@@ -216,15 +222,8 @@ void loop() {
     func_100Hz();
   }
 
-  uint32_t callout_now_time = millis();
-  static uint32_t callout_last_time = 0;
-  if (callout_now_time - callout_last_time >= 2000) {
-    callout_last_time = callout_now_time;
-    if (enable_callout) {
-      // 合成音声読み上げ
-      callout_status();
-    }
-  }
+  // 合成音声読み上げ
+  callout_status();
 
   // テレメトリダウンリンク(タイミングも関数内調整)
   TWE_downlink();
@@ -272,14 +271,15 @@ void polling_UART() {
     data_under_dps_altitude_m = Under_UART.UART_data[2];
     data_under_urm_altitude_m = Under_UART.UART_data[3];
     filtered_under_dps_altitude_m.add(data_under_dps_altitude_m);
-    if (!enable_callout) {
+    if (flight_phase == PLATFORM) {
       under_dps_altitude_platform_m.add(data_under_dps_altitude_m);
     }
     filtered_under_urm_altitude_m.add(data_under_urm_altitude_m);
   }
   if (millis() - last_under_time_ms > 1000) {
-    // 超音波高度のみ冗長系がないため，データが来なければ10mとして高度推定に渡す．
-    filtered_under_urm_altitude_m.add(10.0);
+    // 超音波高度のみ冗長系がないため，データが来なければ8mとして高度推定に渡す．
+    // 測定範囲外のときは10mになり，9m以上でテイクオフ判断をするため故障時は8m
+    filtered_under_urm_altitude_m.add(8.0);
   }
 
   //AirData
@@ -294,7 +294,7 @@ void polling_UART() {
     data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
     filtered_airspeed_ms.add(data_air_sdp_airspeed_mss);
     filtered_air_dps_altitude_m.add(data_air_dps_altitude_m);
-    if (!enable_callout) {
+    if (flight_phase == PLATFORM) {
       air_dps_altitude_platform_m.add(data_air_dps_altitude_m);
     }
   }
@@ -315,10 +315,45 @@ void polling_UART() {
 
 
 void determine_flight_phase() {
-  //発進判定のため，測定のみ100Hz
+  //発進判定のため，IMU測定はここで行う
   read_main_bno();
+
+  static unsigned long int takeoff_time_ms = 0;
+  switch (flight_phase) {
+    case PLATFORM:
+      // 超音波が測定不能な高さになったとき
+      if (filtered_under_urm_altitude_m.get() > 9.0 || estimated_altitude_lake_m < 9.5) {
+        flight_phase = TAKEOFF;
+        takeoff_time_ms = millis();
+      }
+      break;
+    case TAKEOFF:
+      // (ダイブするか知らんけど)ダイブ後に水平飛行に移ったとき(超音波の測定値が信頼できる状態のとき)
+      if (millis() - takeoff_time_ms > 3000) {
+        flight_phase = HIGH_LEVEL;
+      }
+      break;
+    case HIGH_LEVEL:
+      // 超音波が測定できるようになったとき
+      if (filtered_under_urm_altitude_m.get() < 5.0) {
+        flight_phase = MID_LEVEL;
+      }
+      break;
+    case MID_LEVEL:
+      // 高度が1m以下になったとき(高度を高頻度で読み上げる)
+      if (estimated_altitude_lake_m < 1.0) {
+        flight_phase = LOW_LEVEL;
+      }
+      break;
+    case LOW_LEVEL:
+      break;
+    default:
+      break;
+  }
+
   //ここから どうにかする FLAG
-  if (!enable_callout) {
+  /*
+  if (flight_phase == PLATFORM) {
     accx_ave_mss = 0;
     for (int i = accx_history_length - 1; i > 0; i--) {
       accx_history_mss[i] = accx_history_mss[i - 1];
@@ -344,17 +379,17 @@ void determine_flight_phase() {
     velx_ave_ms /= velx_history_length;
 
     if (velx_ave_ms > 0.4) {
-      enable_callout = true;
+      flight_phase = TAKEOFF;
     }
 
     SerialUSB.println(velx_ave_ms);
   }
 
-  if (!enable_callout) {
+  if (flight_phase == PLATFORM) {
     if (filtered_under_urm_altitude_m.get() > 9.0) {
-      enable_callout = true;
+      flight_phase = TAKEOFF;
     }
-  }
+  }*/
 
 
   //ここまで
@@ -371,7 +406,7 @@ void calculate_altitude() {
   // 関数は100Hzで呼び出される
   // 2秒間で気圧から超音波に情報源を切り替え
   static int transition_count = 0;
-  if (enable_callout && filtered_under_urm_altitude_m.get() < 5.0) {
+  if (flight_phase == MID_LEVEL || flight_phase == LOW_LEVEL) {
     if (transition_count <= 200) {
       estimated_altitude_lake_m = filtered_under_urm_altitude_m.get() * (transition_count / 200) + estimated_altitude_lake_m * (1 - (transition_count / 200));
       transition_count++;
@@ -392,6 +427,7 @@ void send_SD() {
             data_main_bno_roll, data_main_bno_pitch, data_main_bno_yaw);
   } else if (loop_count == 2) {
 
+    // SDに書き込む直前で測定
     read_main_dps();
 
     sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
@@ -421,24 +457,23 @@ void send_SD() {
 
 
 void callout_status() {
-  //ToDo
-  /* Wire1.beginTransmission(0x2E);  // スタートとスレーブアドレスを送る役割　（swの役割）
+  static uint32_t next_callout_time = 0;
 
-    char str[] = "teikuohu";
-    Wire1.write(str, strlen(str) * sizeof(char));
-    Wire1.write('\r');
-
-    Wire1.endTransmission();  // stop transmittig*/
-
-  static int step_altitude_lake_m = 10;
-  if (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
-    step_altitude_lake_m--;
-    while (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
-      step_altitude_lake_m--;
+  if (millis() >= next_callout_time) {
+    if (flight_phase != PLATFORM) {
+      static int step_altitude_lake_m = 10;
+      if (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
+        step_altitude_lake_m--;
+        while (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
+          step_altitude_lake_m--;
+        }
+        speaker.callout_altitude(step_altitude_lake_m);
+        next_callout_time = millis() + 2000;
+      } else {
+        speaker.callout_airspeed(filtered_airspeed_ms.get());
+        next_callout_time = millis() + 1000;
+      }
     }
-    speaker.callout_altitude(step_altitude_lake_m);
-  } else {
-    speaker.callout_airspeed(filtered_airspeed_ms.get());
   }
 }
 
@@ -469,7 +504,7 @@ void read_main_dps() {
     data_main_dps_temperature_deg = temp_event.temperature;
     data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
     filtered_main_dps_altitude_m.add(data_main_dps_altitude_m);
-    if (!enable_callout) {
+    if (flight_phase == PLATFORM) {
       main_dps_altitude_platform_m.add(data_main_dps_altitude_m);
     }
   }
