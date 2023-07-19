@@ -132,11 +132,12 @@ volatile double data_main_gps_altitude_m = 0;
 // ----------------------------
 
 void setup() {
+  // LED初期化
   pinMode(LED_ICS, OUTPUT);
   pinMode(LED_Under, OUTPUT);
   pinMode(LED_Air, OUTPUT);
 
-  //delay for program flash
+  // ネイティブポートからの書き込みでシリアルポートを使用するため，リセット直後はUARTを叩かない
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_ICS, HIGH);
     digitalWrite(LED_Under, HIGH);
@@ -148,6 +149,7 @@ void setup() {
     delay(100);
   }
 
+  // UART初期化
   SerialGPS.begin(115200);  //SerialTWE
   SerialICS.begin(115200);  //SerialMainSD
   SerialAir.begin(460800);
@@ -155,6 +157,7 @@ void setup() {
   SerialUSB.begin(115200);
   SerialTWE.print("loading...\n\n");
 
+  // DPS310初期化
   Wire.setClock(400000);
   if (!dps.begin_I2C()) {  // Can pass in I2C address here
     //if (! dps.begin_SPI(DPS310_CS)) {  // If you want to use SPI
@@ -170,6 +173,7 @@ void setup() {
   dps.configureTemperature(DPS310_32HZ, DPS310_2SAMPLES);
   SerialUSB.println("DPS OK!");
 
+  // BNO055初期化
   if (!bno.begin()) {
     SerialUSB.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
     while (1) {
@@ -180,7 +184,7 @@ void setup() {
     }
   }
 
-  //for CALLOUT
+  // 音声合成初期化
   Wire1.begin();
   Wire1.setClock(100000);
   for (int i = 0; i < accx_history_length; i++) {
@@ -190,8 +194,7 @@ void setup() {
     velx_history_ms[i] = 0;
   }
 
-
-  //delay for sensor wake up
+  // センサー・各基板の起動を待機
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_ICS, HIGH);
     digitalWrite(LED_Under, HIGH);
