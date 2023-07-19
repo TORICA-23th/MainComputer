@@ -97,8 +97,11 @@ MovingAverageFloat<50> air_dps_altitude_platform_m;
 float dps_altitude_lake_array_m[3];
 QuickStats dps_altitude_lake_m;
 
+MovingAverageFloat<3> filtered_under_urm_altitude_m;
+
 float estimated_altitude_lake_m = 10.0;
 
+unsigned long int last_under_time_ms = 0;
 
 // ---- sensor data value  ----
 //    data_マイコン名_センサー名_データ種類_単位
@@ -226,7 +229,6 @@ void loop() {
     ISR_100Hz();
   }
 
-  calculate_altitude();
 
   uint32_t callout_now_time = millis();
   static uint32_t callout_last_time = 0;
@@ -343,6 +345,9 @@ void ISR_100Hz() {
 
   //ここまで
 
+
+  calculate_altitude();
+
   static int loop_count = 0;
   if (loop_count == 0) {
     data_main_bno_qw = quat.w();
@@ -437,6 +442,7 @@ void polling_UART() {
   //UnderSide
   int readnum = Under_UART.readUART();
   if (readnum == 4) {
+    last_under_time_ms = millis();
     digitalWrite(LED_Under, !digitalRead(LED_Under));
     data_under_dps_pressure_hPa = Under_UART.UART_data[0];
     data_under_dps_temperature_deg = Under_UART.UART_data[1];
@@ -449,6 +455,11 @@ void polling_UART() {
     if (!enable_callout) {
       under_dps_altitude_platform_m.add(data_under_dps_altitude_m);
     }
+    filtered_under_urm_altitude_m.add(data_under_urm_altitude_m);
+  }
+  if(millis() - last_under_time_ms > 1000){
+    // 超音波高度のみ冗長系がないため，データが来なければ10mとして高度推定に渡す．
+    filtered_under_urm_altitude_m.add(10.0);
   }
 
   //AirData
@@ -497,7 +508,15 @@ void calculate_altitude() {
 
   estimated_altitude_lake_m = dps_altitude_lake_m.median(dps_altitude_lake_array_m, 3);
 
-  //ToDo 超音波統合
+  // 関数は100Hzで呼び出される
+  // 2秒間で気圧から超音波に情報源を切り替え
+  static int transition_count = 0;
+  if(filtered_under_urm_altitude_m.get() < 5.0){
+    if(transition_count<=200){
+      estimated_altitude_lake_m = filtered_under_urm_altitude_m.get()*(transition_count/200) + estimated_altitude_lake_m*(1-(transition_count/200));
+      transition_count++;
+    }
+  }
 }
 
 
