@@ -55,18 +55,20 @@ enum {
 // dps:気圧高度
 // urm:超音波高度
 
+const float const_platform_m = 10.5;
+
 #include "TORICA_MoveAve.h"
 // 対気速度
 TORICA_MoveAve<5> filtered_airspeed_ms(10.2);
 
 // 現在の気圧高度(気圧基準)
-TORICA_MoveAve<5> filtered_main_dps_altitude_m(10.5);
-TORICA_MoveAve<5> filtered_under_dps_altitude_m(10.5);
-TORICA_MoveAve<5> filtered_air_dps_altitude_m(10.5);
+TORICA_MoveAve<5> filtered_main_dps_altitude_m(0);
+TORICA_MoveAve<5> filtered_under_dps_altitude_m(0);
+TORICA_MoveAve<5> filtered_air_dps_altitude_m(0);
 // プラホの高度(気圧基準)
-TORICA_MoveAve<50> main_dps_altitude_platform_m(10.5);
-TORICA_MoveAve<50> under_dps_altitude_platform_m(10.5);
-TORICA_MoveAve<50> air_dps_altitude_platform_m(10.5);
+TORICA_MoveAve<50> main_dps_altitude_platform_m(0);
+TORICA_MoveAve<50> under_dps_altitude_platform_m(0);
+TORICA_MoveAve<50> air_dps_altitude_platform_m(0);
 
 #include "QuickStats.h"
 // 気圧センサを用いた信頼できる対地高度
@@ -78,7 +80,7 @@ QuickStats dps_altitude_lake_m;
 TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.5);
 
 // 気圧と超音波から推定した対地高度
-float estimated_altitude_lake_m = 10.5;
+float estimated_altitude_lake_m = const_platform_m;
 
 
 // ---- sensor data value  ----
@@ -300,10 +302,15 @@ void determine_flight_phase() {
   static unsigned long int takeoff_time_ms = 0;
   switch (flight_phase) {
     case PLATFORM:
-      // 超音波が測定不能な高さになったとき
-      if (filtered_under_urm_altitude_m.get() > 9.0 || estimated_altitude_lake_m < 9.5) {
-        flight_phase = TAKEOFF;
-        takeoff_time_ms = millis();
+      {
+        // 超音波が測定不能な高さになったとき
+        bool over_urm_range = filtered_under_urm_altitude_m.get() > 9.0;
+        // 気圧センサにより下降したと判断したとき(初期値より気圧高度が低いことを想定して起動直後ブロック)
+        bool descending = estimated_altitude_lake_m < 9.5 && millis() > 10000;
+        if (over_urm_range || descending) {
+          flight_phase = TAKEOFF;
+          takeoff_time_ms = millis();
+        }
       }
       break;
     case TAKEOFF:
@@ -333,9 +340,9 @@ void determine_flight_phase() {
 
 
 void calculate_altitude() {
-  dps_altitude_lake_array_m[0] = filtered_main_dps_altitude_m.get() - main_dps_altitude_platform_m.get() + 10.0;
-  dps_altitude_lake_array_m[1] = filtered_under_dps_altitude_m.get() - under_dps_altitude_platform_m.get() + 10.0;
-  dps_altitude_lake_array_m[2] = filtered_air_dps_altitude_m.get() - air_dps_altitude_platform_m.get() + 10.0;
+  dps_altitude_lake_array_m[0] = filtered_main_dps_altitude_m.get() - main_dps_altitude_platform_m.get() + const_platform_m;
+  dps_altitude_lake_array_m[1] = filtered_under_dps_altitude_m.get() - under_dps_altitude_platform_m.get() + const_platform_m;
+  dps_altitude_lake_array_m[2] = filtered_air_dps_altitude_m.get() - air_dps_altitude_platform_m.get() + const_platform_m;
 
   estimated_altitude_lake_m = dps_altitude_lake_m.median(dps_altitude_lake_array_m, 3);
 
