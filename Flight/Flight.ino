@@ -50,51 +50,35 @@ enum {
 } flight_phase = PLATFORM;
 
 
-
-float accx_history_mss[20];
-const int accx_history_length = 20;
-float accx_ave_mss = 0;
-
-//長谷部が追加
-float velx_history_ms[20];
-const int velx_history_length = 20;
-float velx_ave_ms = 0;
-
-const float FilterCoefficient = 0.65;
-float lowpass = 0;
-float highpass = 0;
-
-const float Time_interval = 0.04;
-float oldAcc = 0;
-
-
 // filtered:移動平均
 // lake:対地高度, 無印:気圧基準海抜高度
 // dps:気圧高度
 // urm:超音波高度
 
 #include "TORICA_MoveAve.h"
+// 対気速度
 TORICA_MoveAve<5> filtered_airspeed_ms(10.2);
 
-// 現在の気圧高度
+// 現在の気圧高度(気圧基準)
 TORICA_MoveAve<5> filtered_main_dps_altitude_m(10.5);
 TORICA_MoveAve<5> filtered_under_dps_altitude_m(10.5);
 TORICA_MoveAve<5> filtered_air_dps_altitude_m(10.5);
-// プラホの高度
+// プラホの高度(気圧基準)
 TORICA_MoveAve<50> main_dps_altitude_platform_m(10.5);
 TORICA_MoveAve<50> under_dps_altitude_platform_m(10.5);
 TORICA_MoveAve<50> air_dps_altitude_platform_m(10.5);
 
 #include "QuickStats.h"
-// 3つの気圧高度にそれぞれ移動平均をとってプラホを10mとし，中央値をとった値で，気圧センサを用いた信頼できる対地高度．
+// 気圧センサを用いた信頼できる対地高度
+// 3つの気圧高度にそれぞれ移動平均をとってプラホを10mとし，中央値をとった値
 float dps_altitude_lake_array_m[3];
 QuickStats dps_altitude_lake_m;
 
+// 超音波高度(対地高度)
 TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.5);
 
-float estimated_altitude_lake_m = 10.0;
-
-unsigned long int last_under_time_ms = 0;
+// 気圧と超音波から推定した対地高度
+float estimated_altitude_lake_m = 10.5;
 
 
 // ---- sensor data value  ----
@@ -193,12 +177,6 @@ void setup() {
   // 音声合成初期化
   Wire1.begin();
   Wire1.setClock(100000);
-  for (int i = 0; i < accx_history_length; i++) {
-    accx_history_mss[i] = 0;
-  }
-  for (int i = 0; i < velx_history_length; i++) {
-    velx_history_ms[i] = 0;
-  }
 
   // センサー・各基板の起動を待機
   for (int i = 0; i < 3; i++) {
@@ -261,6 +239,7 @@ void polling_UART() {
   }
 
   //UnderSide
+  static unsigned long int last_under_time_ms = 0;
   int readnum = Under_UART.readUART();
   int under_data_num = 4;
   if (readnum == under_data_num) {
@@ -350,49 +329,6 @@ void determine_flight_phase() {
     default:
       break;
   }
-
-  //ここから どうにかする FLAG
-  /*
-  if (flight_phase == PLATFORM) {
-    accx_ave_mss = 0;
-    for (int i = accx_history_length - 1; i > 0; i--) {
-      accx_history_mss[i] = accx_history_mss[i - 1];
-      accx_ave_mss += accx_history_mss[i];
-    }
-    accx_history_mss[0] = (-1) * data_main_bno_accx_mss;
-    accx_ave_mss += accx_history_mss[0];
-    accx_ave_mss /= accx_history_length;
-
-    velx_ave_ms = 0;
-    for (int i = velx_history_length - 1; i > 0; i--) {
-      velx_history_ms[i] = velx_history_ms[i - 1];
-      velx_ave_ms += velx_history_ms[i];
-    }
-
-    lowpass = lowpass * FilterCoefficient + accx_ave_mss * (1 - FilterCoefficient);
-    highpass = accx_ave_mss - lowpass;
-
-    velx_history_ms[0] = ((highpass + oldAcc) * Time_interval) / 2 + velx_history_ms[1];
-    oldAcc = highpass;
-
-    velx_ave_ms += velx_history_ms[0];
-    velx_ave_ms /= velx_history_length;
-
-    if (velx_ave_ms > 0.4) {
-      flight_phase = TAKEOFF;
-    }
-
-    SerialUSB.println(velx_ave_ms);
-  }
-
-  if (flight_phase == PLATFORM) {
-    if (filtered_under_urm_altitude_m.get() > 9.0) {
-      flight_phase = TAKEOFF;
-    }
-  }*/
-
-
-  //ここまで
 }
 
 
@@ -475,8 +411,8 @@ void callout_status() {
         next_callout_time = millis() + 2000;
         force_call_alt = false;
         call_speed = false;
-      } 
-      if(call_speed) {
+      }
+      if (call_speed) {
         speaker.callout_airspeed(filtered_airspeed_ms.get());
         next_callout_time = millis() + 1500;
         if (flight_phase == LOW_LEVEL) {
@@ -553,7 +489,7 @@ void TWE_downlink() {
     SerialTWE.print("AIR\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
-    sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+09.3f       %+06.2f\n", data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_ms);  //filtered_airspeed_ms.get());
+    sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+09.3f       %+06.2f\n", data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_ms);
     SerialTWE.print(TWE_BUF);
     //sprintf(TWE_BUF, "                %+06.2f\n", filtered_airspeed_ms.get());
     //SerialTWE.print(TWE_BUF);
