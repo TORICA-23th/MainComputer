@@ -73,24 +73,24 @@ float oldAcc = 0;
 // dps:気圧高度
 // urm:超音波高度
 
-#include "MovingAverageFloat.h"
-MovingAverageFloat<10> filtered_airspeed_ms;
+#include "TORICA_MoveAve.h"
+TORICA_MoveAve<5> filtered_airspeed_ms(10.2);
 
 // 現在の気圧高度
-MovingAverageFloat<5> filtered_main_dps_altitude_m;
-MovingAverageFloat<5> filtered_under_dps_altitude_m;
-MovingAverageFloat<5> filtered_air_dps_altitude_m;
+TORICA_MoveAve<5> filtered_main_dps_altitude_m(10.5);
+TORICA_MoveAve<5> filtered_under_dps_altitude_m(10.5);
+TORICA_MoveAve<5> filtered_air_dps_altitude_m(10.5);
 // プラホの高度
-MovingAverageFloat<50> main_dps_altitude_platform_m;
-MovingAverageFloat<50> under_dps_altitude_platform_m;
-MovingAverageFloat<50> air_dps_altitude_platform_m;
+TORICA_MoveAve<50> main_dps_altitude_platform_m(10.5);
+TORICA_MoveAve<50> under_dps_altitude_platform_m(10.5);
+TORICA_MoveAve<50> air_dps_altitude_platform_m(10.5);
 
 #include "QuickStats.h"
 // 3つの気圧高度にそれぞれ移動平均をとってプラホを10mとし，中央値をとった値で，気圧センサを用いた信頼できる対地高度．
 float dps_altitude_lake_array_m[3];
 QuickStats dps_altitude_lake_m;
 
-MovingAverageFloat<3> filtered_under_urm_altitude_m;
+TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.5);
 
 float estimated_altitude_lake_m = 10.0;
 
@@ -123,7 +123,7 @@ volatile float data_air_dps_pressure_hPa = 0;
 volatile float data_air_dps_temperature_deg = 0;
 volatile float data_air_dps_altitude_m = 0;
 volatile float data_air_sdp_differentialPressure_Pa = 0;
-volatile float data_air_sdp_airspeed_mss = 0;
+volatile float data_air_sdp_airspeed_ms = 0;
 
 volatile int data_ics_angle = 0;
 
@@ -291,8 +291,8 @@ void polling_UART() {
     data_air_dps_temperature_deg = Air_UART.UART_data[1];
     data_air_dps_altitude_m = Air_UART.UART_data[2];
     data_air_sdp_differentialPressure_Pa = Air_UART.UART_data[3];
-    data_air_sdp_airspeed_mss = Air_UART.UART_data[4];
-    filtered_airspeed_ms.add(data_air_sdp_airspeed_mss);
+    data_air_sdp_airspeed_ms = Air_UART.UART_data[4];
+    filtered_airspeed_ms.add(data_air_sdp_airspeed_ms);
     filtered_air_dps_altitude_m.add(data_air_dps_altitude_m);
     if (flight_phase == PLATFORM) {
       air_dps_altitude_platform_m.add(data_air_dps_altitude_m);
@@ -407,10 +407,11 @@ void calculate_altitude() {
   // 2秒間で気圧から超音波に情報源を切り替え
   static int transition_count = 0;
   if (flight_phase == MID_LEVEL || flight_phase == LOW_LEVEL) {
-    if (transition_count <= 200) {
-      estimated_altitude_lake_m = filtered_under_urm_altitude_m.get() * (transition_count / 200) + estimated_altitude_lake_m * (1 - (transition_count / 200));
+    if (transition_count < 200) {
       transition_count++;
     }
+    float ratio = (float)transition_count / 200.0;
+    estimated_altitude_lake_m = filtered_under_urm_altitude_m.get() * ratio + estimated_altitude_lake_m * (1 - ratio);
   }
 }
 
@@ -437,7 +438,7 @@ void send_SD() {
   } else if (loop_count == 3) {
     sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f, %d,",
             data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m,
-            data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss,
+            data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_ms,
             data_ics_angle);
   } else {
     sprintf(UART_SD, "%u,%u,%u.%u,%10.7lf,%10.7lf,%5.2lf\n",
@@ -458,20 +459,29 @@ void send_SD() {
 
 void callout_status() {
   static uint32_t next_callout_time = 0;
-
+  static bool force_call_alt = false;
+  static int step_altitude_lake_m = 10;  //今これより下
   if (millis() >= next_callout_time) {
     if (flight_phase != PLATFORM) {
-      static int step_altitude_lake_m = 10;
-      if (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
-        step_altitude_lake_m--;
-        while (estimated_altitude_lake_m <= step_altitude_lake_m - 1) {
-          step_altitude_lake_m--;
-        }
+      bool call_speed = true;
+      if (estimated_altitude_lake_m < step_altitude_lake_m - 1) {
+        step_altitude_lake_m = (int)estimated_altitude_lake_m + 1;
         speaker.callout_altitude(step_altitude_lake_m);
         next_callout_time = millis() + 2000;
-      } else {
+        call_speed = false;
+      }
+      if (force_call_alt) {
+        speaker.callout_altitude(estimated_altitude_lake_m);
+        next_callout_time = millis() + 2000;
+        force_call_alt = false;
+        call_speed = false;
+      } 
+      if(call_speed) {
         speaker.callout_airspeed(filtered_airspeed_ms.get());
-        next_callout_time = millis() + 1000;
+        next_callout_time = millis() + 1500;
+        if (flight_phase == LOW_LEVEL) {
+          force_call_alt = true;
+        }
       }
     }
   }
@@ -534,6 +544,8 @@ void TWE_downlink() {
     SerialTWE.print(TWE_BUF);
     sprintf(TWE_BUF, "sonic_alt\n%+06.2f\n", data_under_urm_altitude_m);
     SerialTWE.print(TWE_BUF);
+    //sprintf(TWE_BUF, "%+06.2f\n", filtered_under_urm_altitude_m.get());
+    //SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
     TWE_downlink_type++;
     TWE_last_send_time = millis();
@@ -541,8 +553,10 @@ void TWE_downlink() {
     SerialTWE.print("AIR\n");
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
-    sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+08.3f        %+06.2f\n", data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_mss);
+    sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+09.3f       %+06.2f\n", data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_ms);  //filtered_airspeed_ms.get());
     SerialTWE.print(TWE_BUF);
+    //sprintf(TWE_BUF, "                %+06.2f\n", filtered_airspeed_ms.get());
+    //SerialTWE.print(TWE_BUF);
     SerialTWE.print("\n");
     TWE_downlink_type++;
     TWE_last_send_time = millis();
