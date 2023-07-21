@@ -410,12 +410,12 @@ void callout_status() {
       if (estimated_altitude_lake_m < step_altitude_lake_m - 1) {
         step_altitude_lake_m = (int)estimated_altitude_lake_m + 1;
         speaker.callout_altitude(step_altitude_lake_m);
-        next_callout_time = millis() + 2000;
+        next_callout_time = millis() + 2400;
         call_speed = false;
       }
       if (force_call_alt) {
         speaker.callout_altitude(estimated_altitude_lake_m);
-        next_callout_time = millis() + 2000;
+        next_callout_time = millis() + 2300;
         force_call_alt = false;
         call_speed = false;
       }
