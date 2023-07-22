@@ -55,7 +55,7 @@ enum {
 // dps:気圧高度
 // urm:超音波高度
 
-const float const_platform_m = 10.7;
+const float const_platform_m = 10.6;
 
 #include "TORICA_MoveAve.h"
 // 対気速度
@@ -110,7 +110,7 @@ QuickStats dps_altitude_lake_m;
 // }
 
 // 超音波高度(対地高度)
-TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.7);
+TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.6);
 
 #include "TORICA_MoveMedian.h"
 // 気圧での対地高度と超音波での対地高度の差
