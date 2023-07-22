@@ -486,7 +486,7 @@ void read_main_dps() {
     dps.getEvents(&temp_event, &pressure_event);
     data_main_dps_pressure_hPa = pressure_event.pressure;
     data_main_dps_temperature_deg = temp_event.temperature;
-    data_main_dps_altitude_m = (pow(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
+    data_main_dps_altitude_m = (powf(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
     filtered_main_dps_altitude_m.add(data_main_dps_altitude_m);
     if (flight_phase == PLATFORM) {
       main_dps_altitude_platform_m.add(data_main_dps_altitude_m);
