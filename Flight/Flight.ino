@@ -72,43 +72,51 @@ TORICA_MoveAve<50> air_dps_altitude_platform_m(0);
 
 // 気圧センサを用いた信頼できる対地高度
 // 3つの気圧高度にそれぞれ移動平均をとってプラホを10mとし，中央値をとった値
+#include "QuickStats.h"
 float dps_altitude_lake_array_m[3];
-float dps_altitude_lake_m()
-{
-  if (dps_altitude_lake_array_m[0] > dps_altitude_lake_array_m[1])
-  {
-    if (dps_altitude_lake_array_m[1] > dps_altitude_lake_array_m[2])
-    {
-      return dps_altitude_lake_array_m[1];
-    }
-    else if (dps_altitude_lake_array_m[0] > dps_altitude_lake_array_m[2])
-    {
-      return dps_altitude_lake_array_m[2];
-    }
-    else
-    {
-      return dps_altitude_lake_array_m[0];
-    }
-  }
-  else
-  {
-    if (dps_altitude_lake_array_m[0] > dps_altitude_lake_array_m[2])
-    {
-      return dps_altitude_lake_array_m[0];
-    }
-    else if (dps_altitude_lake_array_m[1] > dps_altitude_lake_array_m[2])
-    {
-      return dps_altitude_lake_array_m[2];
-    }
-    else
-    {
-      return dps_altitude_lake_array_m[1];
-    }
-  }
-}
+QuickStats dps_altitude_lake_m;
+// float dps_altitude_lake_m()
+// {
+//   if (dps_altitude_lake_array_m[0] > dps_altitude_lake_array_m[1])
+//   {
+//     if (dps_altitude_lake_array_m[1] > dps_altitude_lake_array_m[2])
+//     {
+//       return dps_altitude_lake_array_m[1];
+//     }
+//     else if (dps_altitude_lake_array_m[0] > dps_altitude_lake_array_m[2])
+//     {
+//       return dps_altitude_lake_array_m[2];
+//     }
+//     else
+//     {
+//       return dps_altitude_lake_array_m[0];
+//     }
+//   }
+//   else
+//   {
+//     if (dps_altitude_lake_array_m[0] > dps_altitude_lake_array_m[2])
+//     {
+//       return dps_altitude_lake_array_m[0];
+//     }
+//     else if (dps_altitude_lake_array_m[1] > dps_altitude_lake_array_m[2])
+//     {
+//       return dps_altitude_lake_array_m[2];
+//     }
+//     else
+//     {
+//       return dps_altitude_lake_array_m[1];
+//     }
+//   }
+// }
 
 // 超音波高度(対地高度)
 TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.7);
+
+#include "TORICA_MoveMedian.h"
+// 気圧での対地高度と超音波での対地高度の差
+// 100Hz(calculate)*5s = 500
+TORICA_MoveMedian<500> altitude_dps_urm_offset_m(0);
+
 
 // 気圧と超音波から推定した対地高度
 float estimated_altitude_lake_m = const_platform_m;
@@ -291,7 +299,8 @@ void polling_UART() {
   if (millis() - last_under_time_ms > 1000) {
     // 超音波高度のみ冗長系がないため，データが来なければ8mとして高度推定に渡す．
     // 測定範囲外のときは10mになり，9m以上でテイクオフ判断をするため故障時は8m
-    filtered_under_urm_altitude_m.add(8.0);
+    // filtered_under_urm_altitude_m.add(8.0);
+    // ToDo 明示的にis_aliveを作るべき．値の処理によって7変わる．
   }
 
   //AirData
@@ -334,25 +343,41 @@ void determine_flight_phase() {
   switch (flight_phase) {
     case PLATFORM:
       {
-        // 超音波が測定不能な高さになったとき
-        bool over_urm_range = filtered_under_urm_altitude_m.get() > 9.0;
+        static int over_urm_range_count = 0;
+        if (filtered_under_urm_altitude_m.get() > 9.0) {
+          over_urm_range_count++;
+        } else {
+          over_urm_range_count = 0;
+        }
+        bool over_urm_range = false;
+        // 超音波が測定不能な状態が2秒以上続いたとき
+        if (over_urm_range_count >= 200) {
+          over_urm_range = true;
+        }
         // 気圧センサにより下降したと判断したとき
-        bool descending = estimated_altitude_lake_m < 9.5;
+        bool descending = estimated_altitude_lake_m < 10.0;
         if ((over_urm_range || descending) && millis() > 15000) {
           flight_phase = TAKEOFF;
           takeoff_time_ms = millis();
+        }
+        if (over_urm_range) {
+          SerialTWE.print("\n\nover_urm_range\n\n");
+        }
+        if (descending) {
+          SerialTWE.print("\n\ndescending\n\n");
         }
       }
       break;
     case TAKEOFF:
       // (ダイブするか知らんけど)ダイブ後に水平飛行に移ったとき(超音波の測定値が信頼できる状態のとき)
+      // TAKEOFFで3秒待機することでHIGH_LEVELからMID_LEVELに瞬時に移行することを防ぐ
       if (millis() - takeoff_time_ms > 3000) {
         flight_phase = HIGH_LEVEL;
       }
       break;
     case HIGH_LEVEL:
       // 超音波が測定できるようになったとき
-      if (filtered_under_urm_altitude_m.get() < 5.0) {
+      if (filtered_under_urm_altitude_m.get() < 5.0 && estimated_altitude_lake_m < 5.0) {
         flight_phase = MID_LEVEL;
       }
       break;
@@ -371,21 +396,18 @@ void determine_flight_phase() {
 
 
 void calculate_altitude() {
+  // 100Hzで関数呼び出し
   dps_altitude_lake_array_m[0] = filtered_main_dps_altitude_m.get() - main_dps_altitude_platform_m.get() + const_platform_m;
   dps_altitude_lake_array_m[1] = filtered_under_dps_altitude_m.get() - under_dps_altitude_platform_m.get() + const_platform_m;
   dps_altitude_lake_array_m[2] = filtered_air_dps_altitude_m.get() - air_dps_altitude_platform_m.get() + const_platform_m;
+  estimated_altitude_lake_m = dps_altitude_lake_m.median(dps_altitude_lake_array_m, 3);
 
-  estimated_altitude_lake_m = dps_altitude_lake_m();
-
-  // 関数は100Hzで呼び出される
-  // 2秒間で気圧から超音波に情報源を切り替え
-  static int transition_count = 0;
   if (flight_phase == MID_LEVEL || flight_phase == LOW_LEVEL) {
-    if (transition_count < 200) {
-      transition_count++;
-    }
-    float ratio = (float)transition_count / 200.0;
-    estimated_altitude_lake_m = filtered_under_urm_altitude_m.get() * ratio + estimated_altitude_lake_m * (1 - ratio);
+    // 気圧センサが本来より低い値ならオフセットは正
+    altitude_dps_urm_offset_m.add(filtered_under_urm_altitude_m.get() - estimated_altitude_lake_m);
+
+    // 気圧センサが本来より低い値なら正のオフセットを足す
+    estimated_altitude_lake_m += altitude_dps_urm_offset_m.get();
   }
 }
 
@@ -405,7 +427,8 @@ void send_SD() {
     // SDに書き込む直前で測定
     read_main_dps();
 
-    sprintf(UART_SD, "%.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
+    sprintf(UART_SD, "%.2f,%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
+            estimated_altitude_lake_m, flight_phase,
             data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
             data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m);
 
