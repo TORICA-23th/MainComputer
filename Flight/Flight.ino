@@ -55,7 +55,7 @@ enum {
 // dps:気圧高度
 // urm:超音波高度
 
-const float const_platform_m = 10.5;
+const float const_platform_m = 10.7;
 
 #include "TORICA_MoveAve.h"
 // 対気速度
@@ -108,7 +108,7 @@ float dps_altitude_lake_m()
 }
 
 // 超音波高度(対地高度)
-TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.5);
+TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.7);
 
 // 気圧と超音波から推定した対地高度
 float estimated_altitude_lake_m = const_platform_m;
@@ -375,7 +375,7 @@ void calculate_altitude() {
   dps_altitude_lake_array_m[1] = filtered_under_dps_altitude_m.get() - under_dps_altitude_platform_m.get() + const_platform_m;
   dps_altitude_lake_array_m[2] = filtered_air_dps_altitude_m.get() - air_dps_altitude_platform_m.get() + const_platform_m;
 
-  estimated_altitude_lake_m = dps_altitude_lake_m(dps_altitude_lake_array_m, 3);
+  estimated_altitude_lake_m = dps_altitude_lake_m();
 
   // 関数は100Hzで呼び出される
   // 2秒間で気圧から超音波に情報源を切り替え
