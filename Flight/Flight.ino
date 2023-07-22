@@ -355,7 +355,7 @@ void determine_flight_phase() {
           over_urm_range = true;
         }
         // 気圧センサにより下降したと判断したとき
-        bool descending = estimated_altitude_lake_m < 10.0;
+        bool descending = estimated_altitude_lake_m < 10.2;
         if ((over_urm_range || descending) && millis() > 15000) {
           flight_phase = TAKEOFF;
           takeoff_time_ms = millis();
