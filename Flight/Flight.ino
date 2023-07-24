@@ -114,8 +114,8 @@ TORICA_MoveAve<3> filtered_under_urm_altitude_m(0.6);
 
 #include "TORICA_MoveMedian.h"
 // 気圧での対地高度と超音波での対地高度の差
-// 100Hz(calculate)*5s = 500
-TORICA_MoveMedian<500> altitude_dps_urm_offset_m(0);
+// 100Hz(calculate)*4s = 400
+TORICA_MoveMedian<400> altitude_dps_urm_offset_m(0);
 
 
 // 気圧と超音波から推定した対地高度
@@ -402,12 +402,26 @@ void calculate_altitude() {
   dps_altitude_lake_array_m[2] = filtered_air_dps_altitude_m.get() - air_dps_altitude_platform_m.get() + const_platform_m;
   estimated_altitude_lake_m = dps_altitude_lake_m.median(dps_altitude_lake_array_m, 3);
 
+  // 関数は100Hzで呼び出される
+  // 中央値が出始めるのに2秒，そこから2秒間で気圧から超音波に情報源を切り替え
+  static int transition_count = 0;
   if (flight_phase == MID_LEVEL || flight_phase == LOW_LEVEL) {
     // 気圧センサが本来より低い値ならオフセットは正
     altitude_dps_urm_offset_m.add(filtered_under_urm_altitude_m.get() - estimated_altitude_lake_m);
 
+    if (transition_count < 400) {
+      transition_count++;
+    }
+    float ratio = 1;
+    if(transition_count <400){
+      ratio = 0;
+    }
+    if (transition_count > 200) {
+      (float)(transition_count-200) / 200.0;
+    }
+
     // 気圧センサが本来より低い値なら正のオフセットを足す
-    estimated_altitude_lake_m += altitude_dps_urm_offset_m.get();
+    estimated_altitude_lake_m += altitude_dps_urm_offset_m.get() * ratio;
   }
 }
 
@@ -427,8 +441,8 @@ void send_SD() {
     // SDに書き込む直前で測定
     read_main_dps();
 
-    sprintf(UART_SD, "%.2f,%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
-            estimated_altitude_lake_m, flight_phase,
+    sprintf(UART_SD, "%.2f,%.2f,%d, %.2f,%.2f,%.2f, %.2f,%.2f,%.2f, %.2f,",
+            estimated_altitude_lake_m, altitude_dps_urm_offset_m.get(), flight_phase,
             data_main_dps_pressure_hPa, data_main_dps_temperature_deg, data_main_dps_altitude_m,
             data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m, data_under_urm_altitude_m);
 
