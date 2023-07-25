@@ -121,6 +121,9 @@ TORICA_MoveMedian<400> altitude_dps_urm_offset_m(0);
 // 気圧と超音波から推定した対地高度
 float estimated_altitude_lake_m = const_platform_m;
 
+bool air_is_alive = false;
+bool under_is_alive = false;
+
 
 // ---- sensor data value  ----
 //    data_マイコン名_センサー名_データ種類_単位
@@ -301,12 +304,17 @@ void polling_UART() {
     // 測定範囲外のときは10mになり，9m以上でテイクオフ判断をするため故障時は8m
     // filtered_under_urm_altitude_m.add(8.0);
     // ToDo 明示的にis_aliveを作るべき．値の処理によって7変わる．
+    under_is_alive = false;
+  } else {
+    under_is_alive = true;
   }
 
   //AirData
+  static unsigned long int last_air_time_ms = 0;
   readnum = Air_UART.readUART();
   int air_data_num = 5;
   if (readnum == air_data_num) {
+    last_air_time_ms = millis();
     digitalWrite(LED_Air, !digitalRead(LED_Air));
     data_air_dps_pressure_hPa = Air_UART.UART_data[0];
     data_air_dps_temperature_deg = Air_UART.UART_data[1];
@@ -318,6 +326,11 @@ void polling_UART() {
     if (flight_phase == PLATFORM) {
       air_dps_altitude_platform_m.add(data_air_dps_altitude_m);
     }
+  }
+  if (millis() - last_air_time_ms > 1000) {
+    air_is_alive = false;
+  } else {
+    air_is_alive = true;
   }
 
   //GPS
@@ -360,10 +373,10 @@ void determine_flight_phase() {
           flight_phase = TAKEOFF;
           takeoff_time_ms = millis();
         }
-        if (over_urm_range) {
+        if (over_urm_range && millis() > 15000) {
           SerialTWE.print("\n\nover_urm_range\n\n");
         }
-        if (descending) {
+        if (descending && millis() > 15000) {
           SerialTWE.print("\n\ndescending\n\n");
         }
       }
@@ -403,21 +416,21 @@ void calculate_altitude() {
   estimated_altitude_lake_m = dps_altitude_lake_m.median(dps_altitude_lake_array_m, 3);
 
   // 関数は100Hzで呼び出される
-  // 中央値が出始めるのに2秒，そこから2秒間で気圧から超音波に情報源を切り替え
+  // 中央値が出始めるのに2秒，そこから3秒間で気圧から超音波に情報源を切り替え
   static int transition_count = 0;
   if (flight_phase == MID_LEVEL || flight_phase == LOW_LEVEL) {
     // 気圧センサが本来より低い値ならオフセットは正
     altitude_dps_urm_offset_m.add(filtered_under_urm_altitude_m.get() - estimated_altitude_lake_m);
 
-    if (transition_count < 400) {
+    if (transition_count < 500) {
       transition_count++;
     }
     float ratio = 1;
-    if(transition_count <400){
+    if (transition_count < 500) {
       ratio = 0;
     }
     if (transition_count > 200) {
-      (float)(transition_count-200) / 200.0;
+      ratio = (float)(transition_count - 200) / 300.0;
     }
 
     // 気圧センサが本来より低い値なら正のオフセットを足す
@@ -488,8 +501,12 @@ void callout_status() {
         call_speed = false;
       }
       if (call_speed) {
-        speaker.callout_airspeed(filtered_airspeed_ms.get());
-        next_callout_time = millis() + 1500;
+        if (air_is_alive) {
+          speaker.callout_airspeed(filtered_airspeed_ms.get());
+          next_callout_time = millis() + 1500;
+        } else {
+          next_callout_time = millis();
+        }
         if (flight_phase == LOW_LEVEL) {
           force_call_alt = true;
         }
@@ -550,7 +567,12 @@ void TWE_downlink() {
     TWE_downlink_type++;
     TWE_last_send_time = millis();
   } else if (TWE_downlink_type == 2 && millis() - TWE_last_send_time >= 400) {
-    SerialTWE.print("UNDER\n");
+    SerialTWE.print("UNDER : ");
+    if (under_is_alive) { 
+      SerialTWE.print("alive\n");
+    }else{
+      SerialTWE.print("dead\n");
+    }
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_under_dps_pressure_hPa, data_under_dps_temperature_deg, data_under_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
     sprintf(TWE_BUF, "sonic_alt\n%+06.2f\n", data_under_urm_altitude_m);
@@ -561,7 +583,12 @@ void TWE_downlink() {
     TWE_downlink_type++;
     TWE_last_send_time = millis();
   } else if (TWE_downlink_type == 3 && millis() - TWE_last_send_time >= 400) {
-    SerialTWE.print("AIR\n");
+    SerialTWE.print("AIR : ");
+    if (air_is_alive) { 
+      SerialTWE.print("alive\n");
+    }else{
+      SerialTWE.print("dead\n");
+    }
     sprintf(TWE_BUF, "pressure        temp    alt\n%+08.2f        %+06.2f  %+06.2f\n", data_air_dps_pressure_hPa, data_air_dps_temperature_deg, data_air_dps_altitude_m);
     SerialTWE.print(TWE_BUF);
     sprintf(TWE_BUF, "diffPressure    AirSpeed\n%+09.3f       %+06.2f\n", data_air_sdp_differentialPressure_Pa, data_air_sdp_airspeed_ms);
