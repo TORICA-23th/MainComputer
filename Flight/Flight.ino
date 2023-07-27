@@ -482,8 +482,11 @@ void send_SD() {
 
 
 void callout_status() {
+  // 高度は「コウド，7.7」
+  // 速度は「10.2」
   static uint32_t next_callout_time = 0;
-  static bool force_call_alt = false;
+  static bool call_alt_val = false; // 「コウド，」の後の数値を読み上げる命令
+  static bool force_call_alt = false; // LOW_LEVELにおいて速度の次に高度を読み上げる命令
   static int step_altitude_lake_m = 10;  //今これより下
   if (millis() < next_callout_time) {
     return;
@@ -491,22 +494,31 @@ void callout_status() {
   if (flight_phase == PLATFORM) {
     return;
   }
+
+  if (call_alt_val){
+    speaker.callout_val(estimated_altitude_lake_m);
+    next_callout_time = millis() + 1500;
+    return;
+  }
+
   bool call_speed = true;
   if (estimated_altitude_lake_m < step_altitude_lake_m - 1) {
     step_altitude_lake_m = (int)estimated_altitude_lake_m + 1;
-    speaker.callout_altitude(step_altitude_lake_m);
-    next_callout_time = millis() + 2400;
+    speaker.callout_koudo();
+    call_alt_val = true;
+    next_callout_time = millis() + 900;
     call_speed = false;
   }
   if (force_call_alt) {
-    speaker.callout_altitude(estimated_altitude_lake_m);
-    next_callout_time = millis() + 2400;
+    speaker.callout_koudo();
+    call_alt_val = true;
+    next_callout_time = millis() + 900;
     force_call_alt = false;
     call_speed = false;
   }
   if (call_speed) {
     if (air_is_alive) {
-      speaker.callout_airspeed(filtered_airspeed_ms.get());
+      speaker.callout_val(filtered_airspeed_ms.get());
       next_callout_time = millis() + 1500;
     } else {
       next_callout_time = millis();
