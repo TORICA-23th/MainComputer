@@ -485,32 +485,34 @@ void callout_status() {
   static uint32_t next_callout_time = 0;
   static bool force_call_alt = false;
   static int step_altitude_lake_m = 10;  //今これより下
-  if (millis() >= next_callout_time) {
-    if (flight_phase != PLATFORM) {
-      bool call_speed = true;
-      if (estimated_altitude_lake_m < step_altitude_lake_m - 1) {
-        step_altitude_lake_m = (int)estimated_altitude_lake_m + 1;
-        speaker.callout_altitude(step_altitude_lake_m);
-        next_callout_time = millis() + 2400;
-        call_speed = false;
-      }
-      if (force_call_alt) {
-        speaker.callout_altitude(estimated_altitude_lake_m);
-        next_callout_time = millis() + 2400;
-        force_call_alt = false;
-        call_speed = false;
-      }
-      if (call_speed) {
-        if (air_is_alive) {
-          speaker.callout_airspeed(filtered_airspeed_ms.get());
-          next_callout_time = millis() + 1500;
-        } else {
-          next_callout_time = millis();
-        }
-        if (flight_phase == LOW_LEVEL) {
-          force_call_alt = true;
-        }
-      }
+  if (millis() < next_callout_time) {
+    return;
+  }
+  if (flight_phase == PLATFORM) {
+    return;
+  }
+  bool call_speed = true;
+  if (estimated_altitude_lake_m < step_altitude_lake_m - 1) {
+    step_altitude_lake_m = (int)estimated_altitude_lake_m + 1;
+    speaker.callout_altitude(step_altitude_lake_m);
+    next_callout_time = millis() + 2400;
+    call_speed = false;
+  }
+  if (force_call_alt) {
+    speaker.callout_altitude(estimated_altitude_lake_m);
+    next_callout_time = millis() + 2400;
+    force_call_alt = false;
+    call_speed = false;
+  }
+  if (call_speed) {
+    if (air_is_alive) {
+      speaker.callout_airspeed(filtered_airspeed_ms.get());
+      next_callout_time = millis() + 1500;
+    } else {
+      next_callout_time = millis();
+    }
+    if (flight_phase == LOW_LEVEL) {
+      force_call_alt = true;
     }
   }
 }
@@ -536,15 +538,16 @@ void read_main_bno() {
 }
 
 void read_main_dps() {
-  if (dps.temperatureAvailable() && dps.pressureAvailable()) {
-    dps.getEvents(&temp_event, &pressure_event);
-    data_main_dps_pressure_hPa = pressure_event.pressure;
-    data_main_dps_temperature_deg = temp_event.temperature;
-    data_main_dps_altitude_m = (powf(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
-    filtered_main_dps_altitude_m.add(data_main_dps_altitude_m);
-    if (flight_phase == PLATFORM) {
-      main_dps_altitude_platform_m.add(data_main_dps_altitude_m);
-    }
+  if (!(dps.temperatureAvailable() && dps.pressureAvailable())) {
+    return;
+  }
+  dps.getEvents(&temp_event, &pressure_event);
+  data_main_dps_pressure_hPa = pressure_event.pressure;
+  data_main_dps_temperature_deg = temp_event.temperature;
+  data_main_dps_altitude_m = (powf(1013.25 / data_main_dps_pressure_hPa, 1 / 5.257) - 1) * (data_main_dps_temperature_deg + 273.15) / 0.0065;
+  filtered_main_dps_altitude_m.add(data_main_dps_altitude_m);
+  if (flight_phase == PLATFORM) {
+    main_dps_altitude_platform_m.add(data_main_dps_altitude_m);
   }
 }
 
