@@ -498,6 +498,7 @@ void callout_status() {
   if (call_alt_val){
     speaker.callout_val(estimated_altitude_lake_m);
     next_callout_time = millis() + 1500;
+    call_alt_val = false;
     return;
   }
 
