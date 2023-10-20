@@ -624,7 +624,7 @@ void TWE_downlink() {
     sprintf(TWE_BUF, "%+08.3f\n", estimated_altitude_lake_m);
     SerialTWE.print(TWE_BUF);
 
-
+ 
     //Reset downlink type
     TWE_downlink_type = 0;
     TWE_last_send_time = millis();
